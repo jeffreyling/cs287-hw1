@@ -8,13 +8,14 @@ cmd:option('-datafile', 'SST1.hdf5', 'data file')
 cmd:option('-classifier', 'nb', 'classifier to use')
 
 -- Hyperparameters
-cmd:option('-alpha', 1, 'alpha for naive Bayes')
+cmd:option('-alpha', 19, 'alpha for naive Bayes')
 
 function train_nb(nclasses, nfeatures, X, Y, alpha)
+  -- Trains naive Bayes model
   alpha = alpha or 0
   local N = X:size(1)
 
-  -- Trains naive Bayes model Y ~ X
+  -- intercept
   local b = torch.histc(Y:double(), nclasses)
   b:div(b:sum())
   b:log()
@@ -22,7 +23,8 @@ function train_nb(nclasses, nfeatures, X, Y, alpha)
   local W = torch.Tensor(nclasses, nfeatures):fill(alpha)
   local indices = torch.linspace(1, X:size(1), X:size(1)):long()
   for c = 1, nclasses do
-    W[c]:add(torch.histc(X:index(1, indices[Y:eq(c)]):double(), nfeatures))
+    local counts = torch.histc(X:index(1, indices[Y:eq(c)]):double(), nfeatures)
+    W[c]:add(counts)
   end
   -- zero out padding counts
   W:select(2, 1):zero()
@@ -40,29 +42,23 @@ function NLL(pred, Y)
   return -probs:log():sum()
 end
 
-function zero_one(pred, Y)
-  -- Returns zero-one error
-  local _, argmax = torch.max(pred, 2)
-  return argmax:squeeze():eq(Y:long()):sum() / Y:size(1)
-end
-
-function eval(X, Y, W, b, model)
+function eval(X, Y, W, b, nclasses, model)
   -- Returns error from Y
   model = model or 'nb'
 
-  local pred
+  local N = X:size(1)
+  local pred = torch.zeros(N, nclasses)
   if model == 'nb' then
-    pred = torch.zeros(X:size(1), W:size(1))
-    for i = 1, X:size(1) do
+    for i = 1, N do
       pred[i] = W:index(2, X[i]:long()):sum(2)
       pred[i]:add(b)
     end
   end
 
   -- Compute error from Y
-  --local err = NLL(pred, Y)
-  local err = zero_one(pred, Y)
   local _, argmax = torch.max(pred, 2)
+  argmax:squeeze()
+  local err = argmax:eq(Y:long()):sum() / Y:size(1)
   return argmax, err
 end
 
@@ -78,6 +74,7 @@ function main()
    local Y = f:read('train_output'):all()
    local valid_X = f:read('valid_input'):all()
    local valid_Y = f:read('valid_output'):all()
+   local test_X = f:read('test_input'):all()
    print('Data loaded.')
 
    --local W = torch.zeros(nclasses, nfeatures)
@@ -85,11 +82,10 @@ function main()
 
    -- Train.
    local W, b = train_nb(nclasses, nfeatures, X, Y, opt.alpha)
-   print(W:narrow(2, 1, 10), b)
 
    -- Test.
-   local pred, err = eval(valid_X, valid_Y, W, b)
-   print(pred:narrow(1, 1, 10), err)
+   local pred, err = eval(valid_X, valid_Y, W, b, nclasses)
+   print('Percent correct:', err)
 end
 
 main()
