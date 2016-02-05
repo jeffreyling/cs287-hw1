@@ -84,7 +84,7 @@ function train_logreg(nclasses, nfeatures, X, Y, eta, batch_size, max_epochs)
   local loss = 100
   while loss > 10 and epoch < max_epochs do
     -- get batch
-    local batch_indices = torch.multinomial(torch.ones(1, N), batchsize):long()
+    local batch_indices = torch.multinomial(torch.ones(1, N), batch_size):long()
     X_batch = X:index(1, batch_indices[1])
     Y_batch = Y:index(1, batch_indices[1])
 
