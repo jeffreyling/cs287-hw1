@@ -10,7 +10,8 @@ cmd:option('-classifier', 'nb', 'classifier to use')
 -- Hyperparameters
 cmd:option('-alpha', 19, 'alpha for naive Bayes')
 cmd:option('-eta', 0.01, 'learning rate for SGD')
-cmd:option('-batchsize', 10, 'batch size for SGD')
+cmd:option('-batch_size', 5, 'batch size for SGD')
+cmd:option('-max_epochs', 1000, 'max # of steps for SGD')
 
 function train_nb(nclasses, nfeatures, X, Y, alpha)
   -- Trains naive Bayes model
@@ -69,9 +70,10 @@ function sgd_step(X_batch, Y_batch, W, b, eta)
     return W, b
 end
 
-function train_logreg(nclasses, nfeatures, X, Y, eta, batchsize)
+function train_logreg(nclasses, nfeatures, X, Y, eta, batch_size, max_epochs)
   eta = eta or 0
-  batchsize = batchsize or 0
+  batch_size = batch_size or 0
+  max_epochs = max_epochs or 0
   local N = X:size(1)
 
   -- initialize weights and intercept
@@ -80,7 +82,7 @@ function train_logreg(nclasses, nfeatures, X, Y, eta, batchsize)
   local epoch = 0
 
   local loss = 100
-  while loss > 10 and epoch < 10000 do
+  while loss > 10 and epoch < max_epochs do
     -- get batch
     local batch_indices = torch.multinomial(torch.ones(1, N), batchsize):long()
     X_batch = X:index(1, batch_indices[1])
@@ -149,7 +151,7 @@ function main()
 
    -- Train.
    -- local W, b = train_nb(nclasses, nfeatures, X, Y, opt.alpha)
-   local W, b = train_logreg(nclasses, nfeatures, X, Y, opt.eta, opt.batchsize)
+   local W, b = train_logreg(nclasses, nfeatures, X, Y, opt.eta, opt.batch_size, opt.max_epochs)
 
    -- Test.
    local pred, err = eval(valid_X, valid_Y, W, b, nclasses)
