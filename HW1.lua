@@ -55,7 +55,11 @@ function linear(X, W, b)
     z[i]:add(b)
   end
   -- get softmax
-  local logsoftmax = torch.exp(z):sum(2):log()
+  local max = z:max(2)
+  local logsoftmax = z:clone()
+  logsoftmax:csub(max:expand(logsoftmax:size(1), logsoftmax:size(2)))
+  logsoftmax = torch.exp(logsoftmax):sum(2):log()
+  logsoftmax:add(max:expand(logsoftmax:size(1), logsoftmax:size(2)))
   local Y_hat = z:clone()
   Y_hat:csub(logsoftmax:expand(Y_hat:size(1), Y_hat:size(2)))
   Y_hat:exp()
@@ -169,7 +173,7 @@ function main()
      W, b = train_nb(nclasses, nfeatures, X, Y, opt.alpha)
    elseif opt.classifier == 'logreg' then
      -- sample for faster training
-     local batch_indices = torch.multinomial(torch.ones(X:size(1)), 1000, false):long()
+     local batch_indices = torch.multinomial(torch.ones(X:size(1)), 100, false):long()
      X = X:index(1, batch_indices)
      Y = Y:index(1, batch_indices)
      W, b = train_logreg(nclasses, nfeatures, X, Y, opt.eta, opt.batch_size, opt.max_epochs)
