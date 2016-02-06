@@ -8,8 +8,8 @@ cmd:option('-datafile', 'SST1.hdf5', 'data file')
 cmd:option('-classifier', 'nb', 'classifier to use')
 
 -- Hyperparameters
-cmd:option('-alpha', 0.5, 'alpha for naive Bayes')
-cmd:option('-eta', 0.1, 'learning rate for SGD')
+cmd:option('-alpha', 0.1, 'alpha for naive Bayes')
+cmd:option('-eta', 0.01, 'learning rate for SGD')
 cmd:option('-batch_size', 50, 'batch size for SGD')
 cmd:option('-max_epochs', 1000, 'max # of steps for SGD')
 
@@ -41,8 +41,12 @@ end
 
 function NLL(pred, Y)
   -- Returns negative log-likelihood error.
-  local probs = pred:index(2, Y:long())
-  return -probs:log():sum()
+  local N = Y:size(1)
+  local err = 0
+  for i = 1, N do
+    err = err - torch.log(pred[i][Y[i]])
+  end
+  return err
 end
 
 function linear(X, W, b)
@@ -100,7 +104,7 @@ function train_logreg(nclasses, nfeatures, X, Y, eta, batch_size, max_epochs)
   local epoch = 0
 
   local loss = 100
-  while loss > 10 or epoch < max_epochs do
+  while loss > 10 and epoch < max_epochs do
     -- get batch
     local batch_indices = torch.multinomial(torch.ones(N), batch_size, false):long()
     local X_batch = X:index(1, batch_indices)
@@ -108,6 +112,14 @@ function train_logreg(nclasses, nfeatures, X, Y, eta, batch_size, max_epochs)
 
     -- get gradients
     local W_grad, b_grad = sgd_grad(X_batch, Y_batch, W, b)
+
+    -- numerical grads
+    --local eps = 0.01
+    --local y1 = linear(X_batch, W, b + torch.Tensor{eps,0,0,0,0})
+    --local y2 = linear(X_batch, W, b - torch.Tensor{eps,0,0,0,0})
+    --print((NLL(y1, Y_batch) - NLL(y2, Y_batch)) / (2 * eps))
+    --print(b_grad)
+    --io.read()
 
     -- update weights
     W:csub(W_grad:mul(eta))
@@ -138,13 +150,8 @@ end
 function eval(X, Y, W, b, nclasses)
   -- Returns error from Y
 
-  local N = X:size(1)
-  local pred = torch.zeros(N, nclasses)
-  for i = 1, N do
-    pred[i] = W:index(2, X[i]:long()):sum(2)
-    pred[i]:add(b)
-  end
-
+  local _, pred = linear(X, W, b)
+  
   -- Compute error from Y
   local _, argmax = torch.max(pred, 2)
   argmax:squeeze()
