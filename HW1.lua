@@ -8,7 +8,7 @@ cmd:option('-datafile', 'SST1.hdf5', 'data file')
 cmd:option('-classifier', 'nb', 'classifier to use')
 
 -- Hyperparameters
-cmd:option('-alpha', 1, 'alpha for naive Bayes')
+cmd:option('-alpha', 2, 'alpha for naive Bayes')
 cmd:option('-eta', 0.001, 'learning rate for SGD')
 cmd:option('-batch_size', 50, 'batch size for SGD')
 cmd:option('-max_epochs', 1000, 'max # of steps for SGD')
@@ -17,6 +17,7 @@ function train_nb(nclasses, nfeatures, X, Y, alpha)
   -- Trains naive Bayes model
   alpha = alpha or 0
   local N = X:size(1)
+  local k = X:size(2)
 
   -- intercept
   local b = torch.histc(Y:double(), nclasses)
@@ -24,18 +25,24 @@ function train_nb(nclasses, nfeatures, X, Y, alpha)
   b:log():csub(b_logsum)
 
   local W = torch.Tensor(nclasses, nfeatures):fill(alpha)
-  local indices = torch.linspace(1, X:size(1), X:size(1)):long()
-  for c = 1, nclasses do
-    local counts = torch.histc(X:index(1, indices[Y:eq(c)]):double(), nfeatures)
-    W[c]:add(counts)
+  local indices = torch.linspace(1, N, N):long()
+  --for c = 1, nclasses do
+    --local counts = torch.histc(X:index(1, indices[Y:eq(c)]):double(), nfeatures)
+    --W[c]:add(counts)
+  --end
+  for i = 1, N do
+    W:select(1, Y[i]):indexAdd(1, X[i]:long(), torch.ones(k))
   end
   -- zero out padding counts
   W:select(2, 1):zero()
-  local W_logsum = W:sum(2):log()
-  print(W_logsum)
-  W:log():csub(W_logsum:expand(W:size(1), W:size(2)))
+  W:cdiv(W:sum(2):expand(W:size(1), W:size(2)))
+  W:log()
   -- padding weight to zero
   W:select(2, 1):zero()
+
+  --local W_logsum = W:sum(2):log()
+  --print(W_logsum)
+  --W:log():csub(W_logsum:expand(W:size(1), W:size(2)))
 
   return W, b
 end
@@ -57,10 +64,7 @@ function linear(X, W, b)
   local z = torch.zeros(N, W:size(1))
   for i = 1, N do
     -- get predictions
-    local feats = torch.zeros(W:size(2), 1)
-    feats:indexFill(1, X[i]:long(), 1)
-    feats:squeeze()
-    z[i] = W[{{}, feats:long()}]:sum(2)
+    z[i] = W:index(2, X[i]:long()):sum(2)
     z[i]:add(b)
   end
   -- get softmax
@@ -138,14 +142,6 @@ function train_logreg(nclasses, nfeatures, X, Y, eta, batch_size, max_epochs)
     local loss = NLL(pred, Y)
     print(loss)
 
-    --local cross_entropy = torch.zeros(N)
-    --for i = 1, N do
-      --pred[i] = W:index(2, X[i]:long()):sum(2)
-      --local max = pred[i]:max()
-      --cross_entropy[i] = pred[i]:csub(max + math.log(pred[i]:csub(max):exp():sum()))[Y[i]] * -1
-    --end
-    --loss = cross_entropy:sum()
-    --print(loss)
     epoch = epoch + 1
   end
   print('Trained', epoch, 'epochs')
@@ -159,7 +155,8 @@ function eval(X, Y, W, b, nclasses)
   -- Compute error from Y
   local _, argmax = torch.max(pred, 2)
   argmax:squeeze()
-  local err = argmax:eq(Y:long()):sum() / Y:size(1)
+  local err = argmax:eq(Y:long()):sum()
+  err = err / Y:size(1)
   return argmax, err
 end
 
