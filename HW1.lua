@@ -211,7 +211,7 @@ function train_logreg(nclasses, nfeatures, X, Y, eta, batch_size, max_epochs)
     epoch = epoch + 1
   end
   print('Trained', epoch, 'epochs')
-  return W, b
+  return W, b, loss
 end
 
 function train_hinge(nclasses, nfeatures, X, Y, eta, batch_size, max_epochs)
@@ -258,7 +258,7 @@ function train_hinge(nclasses, nfeatures, X, Y, eta, batch_size, max_epochs)
     epoch = epoch + 1
   end
   print('Trained', epoch, 'epochs')
-  return W, b
+  return W, b, loss
 end
 
 function eval(X, Y, W, b, nclasses)
@@ -299,27 +299,35 @@ function main()
    print('Data loaded.')
 
    -- Train.
-   local W, b
+   local W, b, loss
    if opt.classifier == 'nb' then
      W, b = train_nb(nclasses, nfeatures, X, Y, opt.alpha)
+     loss = 'N/A'
    elseif opt.classifier == 'logreg' then
      -- sample for faster training
      --local batch_indices = torch.multinomial(torch.ones(X:size(1)), 100, false):long()
      --X = X:index(1, batch_indices)
      --Y = Y:index(1, batch_indices)
-     W, b = train_logreg(nclasses, nfeatures, X, Y, opt.eta, opt.batch_size, opt.max_epochs)
+     W, b, loss = train_logreg(nclasses, nfeatures, X, Y, opt.eta, opt.batch_size, opt.max_epochs)
    elseif opt.classifier == 'hinge' then
      -- sample for faster training
      --local batch_indices = torch.multinomial(torch.ones(X:size(1)), 100, false):long()
      --X = X:index(1, batch_indices)
      --Y = Y:index(1, batch_indices)
-     W, b = train_hinge(nclasses, nfeatures, X, Y, opt.eta, opt.batch_size, opt.max_epochs)
+     W, b, loss = train_hinge(nclasses, nfeatures, X, Y, opt.eta, opt.batch_size, opt.max_epochs)
    end
-   print('Training time:', os.clock() - start)
+   local time = os.clock() - start
+   print('Training time:', time, 'seconds')
+   print('Loss:', loss)
 
    -- Test.
    local pred, err = eval(valid_X, valid_Y, W, b, nclasses)
    print('Percent correct:', err)
+
+   -- Log results.
+   f = io.open('log.txt', 'a')
+   f:write(opt.classifier,' ',opt.alpha,' ',opt.eta,' ', opt.batch_size,' ', opt.max_epochs,' ', time,' ', loss,' ', err, '\n')
+   f:close()
 end
 
 main()
