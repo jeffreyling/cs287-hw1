@@ -6,6 +6,7 @@ cmd = torch.CmdLine()
 -- Cmd Args
 cmd:option('-datafile', 'SST1.hdf5', 'data file')
 cmd:option('-classifier', 'nb', 'classifier to use')
+cmd:option('-logfile', 'log.txt', 'log file')
 
 -- Hyperparameters
 cmd:option('-alpha', 2, 'alpha for naive Bayes')
@@ -325,7 +326,7 @@ function main()
    print('Percent correct:', err)
 
    -- Log results.
-   f = io.open('log.txt', 'a')
+   f = io.open(opt.logfile, 'a')
    f:write(opt.classifier,' ',opt.alpha,' ',opt.eta,' ', opt.batch_size,' ', opt.max_epochs,' ', time,' ', loss,' ', err, '\n')
    f:close()
 end
