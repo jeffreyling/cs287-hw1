@@ -11,7 +11,8 @@ cmd:option('-classifier', 'nb', 'classifier to use')
 cmd:option('-alpha', 2, 'alpha for naive Bayes')
 cmd:option('-eta', 0.001, 'learning rate for SGD')
 cmd:option('-batch_size', 50, 'batch size for SGD')
-cmd:option('-max_epochs', 1000, 'max # of steps for SGD')
+cmd:option('-max_epochs', 100, 'max # of epochs for SGD')
+cmd:option('-lambda', 10.0, 'regularization lambda for SGD')
 
 function train_nb(nclasses, nfeatures, X, Y, alpha)
   -- Trains naive Bayes model
@@ -25,11 +26,6 @@ function train_nb(nclasses, nfeatures, X, Y, alpha)
   b:log():csub(b_logsum)
 
   local W = torch.Tensor(nclasses, nfeatures):fill(alpha)
-  local indices = torch.linspace(1, N, N):long()
-  --for c = 1, nclasses do
-    --local counts = torch.histc(X:index(1, indices[Y:eq(c)]):double(), nfeatures)
-    --W[c]:add(counts)
-  --end
   for i = 1, N do
     W:select(1, Y[i]):indexAdd(1, X[i]:long(), torch.ones(k))
   end
@@ -39,10 +35,6 @@ function train_nb(nclasses, nfeatures, X, Y, alpha)
   W:log()
   -- padding weight to zero
   W:select(2, 1):zero()
-
-  --local W_logsum = W:sum(2):log()
-  --print(W_logsum)
-  --W:log():csub(W_logsum:expand(W:size(1), W:size(2)))
 
   return W, b
 end
@@ -60,7 +52,6 @@ end
 function linear(X, W, b)
   -- performs y = softmax(x*W + b)
   local N = X:size(1)
-  local k = X:size(2)
   local z = torch.zeros(N, W:size(1))
   for i = 1, N do
     -- get predictions
@@ -101,7 +92,11 @@ function sgd_grad(X_batch, Y_batch, W, b)
     return W_grad, b_grad
 end
 
-function train_logreg(nclasses, nfeatures, X, Y, eta, batch_size, max_epochs)
+function reg(W, lambda)
+  return torch.pow(W, 2):sum() * lambda / 2
+end
+
+function train_logreg(nclasses, nfeatures, X, Y, eta, batch_size, max_epochs, lambda)
   eta = eta or 0
   batch_size = batch_size or 0
   max_epochs = max_epochs or 0
@@ -112,36 +107,62 @@ function train_logreg(nclasses, nfeatures, X, Y, eta, batch_size, max_epochs)
   local b = torch.zeros(nclasses)
   local epoch = 0
 
-  local loss = 100
-  while loss > 10 and epoch < max_epochs do
-    -- get batch
-    local batch_indices = torch.multinomial(torch.ones(N), batch_size, false):long()
-    local X_batch = X:index(1, batch_indices)
-    local Y_batch = Y:index(1, batch_indices)
+  local prev_loss = 1e10
+  -- shuffle for batches
+  local shuffle = torch.randperm(N):long()
+  X = X:index(1, shuffle)
+  Y = Y:index(1, shuffle)
 
-    -- get gradients
-    local W_grad, b_grad = sgd_grad(X_batch, Y_batch, W, b)
+  while epoch < max_epochs do
+    -- loop through each batch
+    for batch = 1, N, batch_size do
+      if ((batch - 1) / batch_size) % 1000 == 0 then
+        print(batch)
+      end
+      local sz = batch_size
+      if batch + batch_size > N then
+        sz = N - batch + 1
+      end
+      local X_batch = X:narrow(1, batch, sz)
+      local Y_batch = Y:narrow(1, batch, sz)
 
-    -- numerical grads
-    --local eps = 1e-5
-    --local y1 = linear(X_batch, W, b + torch.Tensor{0,eps,0,0,0})
-    --local y2 = linear(X_batch, W, b - torch.Tensor{0,eps,0,0,0})
-    --print((NLL(y1, Y_batch) - NLL(y2, Y_batch)) / (2 * eps * batch_size))
-    --print(b_grad)
-    --io.read()
+      -- get gradients
+      local W_grad, b_grad = sgd_grad(X_batch, Y_batch, W, b)
 
-    -- update weights
-    W:csub(W_grad:mul(eta))
-    b:csub(b_grad:mul(eta))
-    
-    -- zero padding
-    W:select(2, 1):zero()
+      -- numerical grads
+      local eps = 1e-5
+      local del = torch.zeros(W:size(1), W:size(2))
+      del[3][3] = eps
+      local y1 = linear(X_batch, W + del, b)
+      local y2 = linear(X_batch, W - del, b)
+      --local reg1 = reg(W + del, lambda)
+      --local reg2 = reg(W - del, lambda)
+      --print((NLL(y1, Y_batch) + reg1 - NLL(y2, Y_batch) - reg2) / (2 * eps * batch_size))
+      print((NLL(y1, Y_batch) - NLL(y2, Y_batch)) / (2 * eps * batch_size))
+      print(W_grad[3][3])
+      io.read()
+
+      -- regularization update
+      W:mul(1 - eta * lambda)
+      b:mul(1 - eta * lambda)
+      -- update weights
+      W:csub(W_grad:mul(eta))
+      b:csub(b_grad:mul(eta))
+      
+      -- zero padding
+      W:select(2, 1):zero()
+    end
 
     -- calculate loss
     local pred = linear(X, W, b)
     local loss = NLL(pred, Y)
+    loss = loss + reg(W, lambda)
     print(loss)
 
+    if torch.abs(prev_loss - loss) < 0.1 then
+      break
+    end
+    prev_loss = loss
     epoch = epoch + 1
   end
   print('Trained', epoch, 'epochs')
@@ -190,11 +211,14 @@ function main()
      W, b = train_nb(nclasses, nfeatures, X, Y, opt.alpha)
    elseif opt.classifier == 'logreg' then
      -- sample for faster training
-     --local batch_indices = torch.multinomial(torch.ones(X:size(1)), 100, false):long()
-     --X = X:index(1, batch_indices)
-     --Y = Y:index(1, batch_indices)
-     W, b = train_logreg(nclasses, nfeatures, X, Y, opt.eta, opt.batch_size, opt.max_epochs)
+     local batch_indices = torch.multinomial(torch.ones(X:size(1)), 10000, false):long()
+     X = X:index(1, batch_indices)
+     Y = Y:index(1, batch_indices)
+     W, b = train_logreg(nclasses, nfeatures, X, Y, opt.eta, opt.batch_size, opt.max_epochs, opt.lambda)
    end
+
+   print(W:narrow(2, 1, 10))
+   print(b)
 
    -- Test.
    local pred, err = eval(valid_X, valid_Y, W, b, nclasses)
