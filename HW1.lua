@@ -1,4 +1,4 @@
--- Only requirement allowed
+  -- Only requirement allowed
 require("hdf5")
 
 cmd = torch.CmdLine()
@@ -173,9 +173,15 @@ function train_logreg(nclasses, nfeatures, X, Y, eta, batch_size, max_epochs)
   local epoch = 0
 
   local loss = 100
+  local indices = torch.randperm(N)
   while loss > 10 and epoch < max_epochs do
     -- get batch
-    local batch_indices = torch.randperm(N):narrow(1,1,batch_size):long()
+    local batch_indices = torch.zeros(1, batch_size)
+    if (epoch + 1) * batch_size > N then
+      indices = torch.randperm(N)
+    else
+      batch_indices = indices:narrow(1, epoch * batch_size + 1, batch_size):long()
+    end
     local X_batch = X:index(1, batch_indices)
     local Y_batch = Y:index(1, batch_indices)
 
@@ -277,6 +283,7 @@ function test()
 end
 
 function main() 
+   local start = os.clock()
    -- Parse input params
    opt = cmd:parse(arg)
    local f = hdf5.open(opt.datafile, 'r')
@@ -308,6 +315,7 @@ function main()
      --Y = Y:index(1, batch_indices)
      W, b = train_hinge(nclasses, nfeatures, X, Y, opt.eta, opt.batch_size, opt.max_epochs)
    end
+   print('Training time:', os.clock() - start)
 
    -- Test.
    local pred, err = eval(valid_X, valid_Y, W, b, nclasses)
