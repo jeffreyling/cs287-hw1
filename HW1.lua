@@ -1,4 +1,4 @@
--- Only requirement allowed
+  -- Only requirement allowed
 require("hdf5")
 
 cmd = torch.CmdLine()
@@ -6,6 +6,7 @@ cmd = torch.CmdLine()
 -- Cmd Args
 cmd:option('-datafile', 'SST1.hdf5', 'data file')
 cmd:option('-classifier', 'nb', 'classifier to use')
+cmd:option('-logfile', 'log.txt', 'log file')
 
 -- Hyperparameters
 cmd:option('-alpha', 2, 'alpha for naive Bayes')
@@ -111,10 +112,6 @@ function cross_entropy_grad(X_batch, Y_batch, W, b)
     return W_grad, b_grad
 end
 
-function reg(W, lambda)
-  return torch.pow(W, 2):sum() * lambda / 2
-end
-
 function hinge_grad(X_batch, Y_batch, W, b)
   local N = X_batch:size(1)
 
@@ -156,7 +153,11 @@ function hinge_grad(X_batch, Y_batch, W, b)
   return W_grad, b_grad
 end
 
-function train_logreg(nclasses, nfeatures, X, Y, eta, batch_size, max_epochs)
+function reg(W, lambda)
+  return torch.pow(W, 2):sum() * lambda / 2
+end
+
+function train_reg(nclasses, nfeatures, X, Y, eta, batch_size, max_epochs, lambda, model)
   eta = eta or 0
   batch_size = batch_size or 0
   max_epochs = max_epochs or 0
@@ -175,83 +176,78 @@ function train_logreg(nclasses, nfeatures, X, Y, eta, batch_size, max_epochs)
 
   while epoch < max_epochs do
     -- loop through each batch
-    for batch = 1, N, batch_size do
-      if ((batch - 1) / batch_size) % 1000 == 0 then
-        print(batch)
+      for batch = 1, N, batch_size do
+          if ((batch - 1) / batch_size) % 100 == 0 then
+            print(batch)
+          end
+          local sz = batch_size
+          if batch + batch_size > N then
+            sz = N - batch + 1
+          end
+          local X_batch = X:narrow(1, batch, sz)
+          local Y_batch = Y:narrow(1, batch, sz)
+
+          -- get batch
+          --local batch_indices = torch.zeros(1, batch_size)
+          --if (epoch + 1) * batch_size > N then
+            --indices = torch.randperm(N)
+          --else
+            --batch_indices = indices:narrow(1, epoch * batch_size + 1, batch_size):long()
+          --end
+          --local X_batch = X:index(1, batch_indices)
+          --local Y_batch = Y:index(1, batch_indices)
+
+          -- get gradients
+          local W_grad, b_grad
+          if model == 'logreg' then
+            W_grad, b_grad = cross_entropy_grad(X_batch, Y_batch, W, b)
+          elseif model == 'hinge' then
+            W_grad, b_grad = hinge_grad(X_batch, Y_batch, W, b)
+          end
+
+          -- numerical grads
+          --local eps = 1e-5
+          --local del = torch.zeros(W:size(1), W:size(2))
+          --del[3][3] = eps
+          --local y1 = linear(X_batch, W + del, b)
+          --local y2 = linear(X_batch, W - del, b)
+          --local reg1 = reg(W + del, lambda)
+          --local reg2 = reg(W - del, lambda)
+          --print((NLL(y1, Y_batch) + reg1 - NLL(y2, Y_batch) - reg2) / (2 * eps * batch_size))
+          --print((NLL(y1, Y_batch) - NLL(y2, Y_batch)) / (2 * eps * batch_size))
+          --print(W_grad[3][3])
+          --io.read()
+
+          -- regularization update
+          W:mul(1 - eta * lambda)
+          b:mul(1 - eta * lambda)
+          -- update weights
+          W:csub(W_grad:mul(eta))
+          b:csub(b_grad:mul(eta))
+          
+          -- zero padding
+          W:select(2, 1):zero()
       end
-      local sz = batch_size
-      if batch + batch_size > N then
-        sz = N - batch + 1
+
+      -- calculate loss
+      local pred = linear(X, W, b)
+      local loss
+      if model == 'logreg' then
+        loss = NLL(pred, Y)
+      elseif model == 'hinge' then
+        loss = hinge(pred, Y)
       end
-      local X_batch = X:narrow(1, batch, sz)
-      local Y_batch = Y:narrow(1, batch, sz)
+      loss = loss + reg(W, lambda)
+      print(loss)
 
-      -- get gradients
-      local W_grad, b_grad = sgd_grad(X_batch, Y_batch, W, b)
-
-      -- numerical grads
-      local eps = 1e-5
-      local del = torch.zeros(W:size(1), W:size(2))
-      del[3][3] = eps
-      local y1 = linear(X_batch, W + del, b)
-      local y2 = linear(X_batch, W - del, b)
-      --local reg1 = reg(W + del, lambda)
-      --local reg2 = reg(W - del, lambda)
-      --print((NLL(y1, Y_batch) + reg1 - NLL(y2, Y_batch) - reg2) / (2 * eps * batch_size))
-      print((NLL(y1, Y_batch) - NLL(y2, Y_batch)) / (2 * eps * batch_size))
-      print(W_grad[3][3])
-      io.read()
-
-      -- regularization update
-      W:mul(1 - eta * lambda)
-      b:mul(1 - eta * lambda)
-      -- update weights
-      W:csub(W_grad:mul(eta))
-      b:csub(b_grad:mul(eta))
-      
-      -- zero padding
-      W:select(2, 1):zero()
-    end
-=======
-  local loss = 100
-  while loss > 10 and epoch < max_epochs do
-    -- get batch
-    local batch_indices = torch.randperm(N):narrow(1,1,batch_size):long()
-    local X_batch = X:index(1, batch_indices)
-    local Y_batch = Y:index(1, batch_indices)
-
-    -- get gradients
-    local W_grad, b_grad = cross_entropy_grad(X_batch, Y_batch, W, b)
-
-    -- numerical grads
-    --local eps = 1e-5
-    --local y1 = linear(X_batch, W, b + torch.Tensor{0,eps,0,0,0})
-    --local y2 = linear(X_batch, W, b - torch.Tensor{0,eps,0,0,0})
-    --print((NLL(y1, Y_batch) - NLL(y2, Y_batch)) / (2 * eps * batch_size))
-    --print(b_grad)
-    --io.read()
-
-    -- update weights
-    W:csub(W_grad:mul(eta))
-    b:csub(b_grad:mul(eta))
-    
-    -- zero padding
-    W:select(2, 1):zero()
-
-    -- calculate loss
-    local pred = linear(X, W, b)
-    local loss = NLL(pred, Y)
-    loss = loss + reg(W, lambda)
-    print(loss)
-
-    if torch.abs(prev_loss - loss) < 0.1 then
-      break
-    end
-    prev_loss = loss
-    epoch = epoch + 1
+      if torch.abs(prev_loss - loss) < 0.1 then
+        break
+      end
+      prev_loss = loss
+      epoch = epoch + 1
   end
   print('Trained', epoch, 'epochs')
-  return W, b
+  return W, b, loss
 end
 
 function train_hinge(nclasses, nfeatures, X, Y, eta, batch_size, max_epochs)
@@ -292,13 +288,13 @@ function train_hinge(nclasses, nfeatures, X, Y, eta, batch_size, max_epochs)
 
     -- calculate loss
     local pred = linear(X, W, b)
-    local loss = hinge(pred, Y)
+    loss = hinge(pred, Y)
     print(loss)
 
     epoch = epoch + 1
   end
   print('Trained', epoch, 'epochs')
-  return W, b
+  return W, b, loss
 end
 
 function eval(X, Y, W, b, nclasses)
@@ -323,6 +319,7 @@ function test()
 end
 
 function main() 
+   local start = os.clock()
    -- Parse input params
    opt = cmd:parse(arg)
    local f = hdf5.open(opt.datafile, 'r')
@@ -338,22 +335,20 @@ function main()
    print('Data loaded.')
 
    -- Train.
-   local W, b
+   local W, b, loss
    if opt.classifier == 'nb' then
      W, b = train_nb(nclasses, nfeatures, X, Y, opt.alpha)
-   elseif opt.classifier == 'logreg' then
+     loss = 'N/A'
+   else
      -- sample for faster training
-     local batch_indices = torch.multinomial(torch.ones(X:size(1)), 10000, false):long()
-     X = X:index(1, batch_indices)
-     Y = Y:index(1, batch_indices)
-     W, b = train_logreg(nclasses, nfeatures, X, Y, opt.eta, opt.batch_size, opt.max_epochs, opt.lambda)
-   elseif opt.classifier == 'hinge' then
-     -- sample for faster training
-     --local batch_indices = torch.multinomial(torch.ones(X:size(1)), 100, false):long()
+     --local batch_indices = torch.multinomial(torch.ones(X:size(1)), 10000, false):long()
      --X = X:index(1, batch_indices)
      --Y = Y:index(1, batch_indices)
-     W, b = train_hinge(nclasses, nfeatures, X, Y, opt.eta, opt.batch_size, opt.max_epochs)
+     W, b, loss = train_reg(nclasses, nfeatures, X, Y, opt.eta, opt.batch_size, opt.max_epochs, opt.lambda, opt.classifier)
    end
+   local time = os.clock() - start
+   print('Training time:', time, 'seconds')
+   print('Loss:', loss)
 
    print(W:narrow(2, 1, 10))
    print(b)
@@ -361,6 +356,11 @@ function main()
    -- Test.
    local pred, err = eval(valid_X, valid_Y, W, b, nclasses)
    print('Percent correct:', err)
+
+   -- Log results.
+   f = io.open(opt.logfile, 'a')
+   f:write(opt.classifier,' ',opt.alpha,' ',opt.eta,' ', opt.batch_size,' ', opt.max_epochs,' ', time,' ', loss,' ', err, '\n')
+   f:close()
 end
 
 main()
