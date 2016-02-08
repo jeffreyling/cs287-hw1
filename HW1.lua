@@ -49,6 +49,25 @@ function NLL(pred, Y)
   return err
 end
 
+function hinge(pred, Y)
+  -- returns hinge error.
+  local N = Y:size(1)
+  local err = 0
+  val, ind = pred:topk(2, true)
+  local x = 0
+  for i = 1, N do
+    if Y[i] == ind[i][1] then
+      x = 1 - (val[i][1] + val[i][2])
+    else
+      x = 1 - (val[i][1] + pred[i][Y[i]])
+    end
+    if x > 0 then
+      err = err + x
+    end
+  end
+  return err
+end
+
 function linear(X, W, b)
   -- performs y = softmax(x*W + b)
   local N = X:size(1)
@@ -70,7 +89,7 @@ function linear(X, W, b)
   return Y_hat, z
 end
 
-function sgd_grad(X_batch, Y_batch, W, b)
+function cross_entropy_grad(X_batch, Y_batch, W, b)
     local N = X_batch:size(1)
 
     local Y_hat, z = linear(X_batch, W, b)
@@ -96,7 +115,48 @@ function reg(W, lambda)
   return torch.pow(W, 2):sum() * lambda / 2
 end
 
-function train_logreg(nclasses, nfeatures, X, Y, eta, batch_size, max_epochs, lambda)
+function hinge_grad(X_batch, Y_batch, W, b)
+  local N = X_batch:size(1)
+
+  local Y_hat, z = linear(X_batch, W, b)
+  -- get the hinge classes
+  local val, ind = Y_hat:topk(2, true)
+  local non_gold_max = torch.zeros(N, 1)
+  for i = 1, N do
+    if Y_hat[Y_batch[i]] ~= val[i][1] then
+      non_gold_max[i] = ind[i][1]
+    else
+      non_gold_max[i] = ind[i][2]
+    end
+  end
+  -- get gradient w.r.t. z
+  local z_grad = Y_hat:clone()
+  for i = 1, N do
+    for j = 1, nclasses do
+      if j == Y_batch[i] then
+        z_grad[i][j] = Y_hat[i][j] - 1  
+      elseif j == non_gold_max[i] then
+        z_grad[i][j] = z_grad[i][j] * -1
+      else
+        z_grad[i][j] = 0
+      end
+    end
+  end
+  z_grad:cmul(Y_hat):mul(-1)
+
+  -- collapse and compute W, b grads
+  z_grad = z_grad:mean(1):squeeze()
+  local b_grad = z_grad:clone()
+  local W_grad = torch.zeros(nclasses, nfeatures)
+  for i = 1, N do
+    W_grad:indexAdd(2, X_batch[i]:long(), z_grad:view(z_grad:nElement(), 1):expand(nclasses, X_batch[i]:size(1)))
+  end
+  W_grad:div(N)
+
+  return W_grad, b_grad
+end
+
+function train_logreg(nclasses, nfeatures, X, Y, eta, batch_size, max_epochs)
   eta = eta or 0
   batch_size = batch_size or 0
   max_epochs = max_epochs or 0
@@ -152,6 +212,31 @@ function train_logreg(nclasses, nfeatures, X, Y, eta, batch_size, max_epochs, la
       -- zero padding
       W:select(2, 1):zero()
     end
+=======
+  local loss = 100
+  while loss > 10 and epoch < max_epochs do
+    -- get batch
+    local batch_indices = torch.randperm(N):narrow(1,1,batch_size):long()
+    local X_batch = X:index(1, batch_indices)
+    local Y_batch = Y:index(1, batch_indices)
+
+    -- get gradients
+    local W_grad, b_grad = cross_entropy_grad(X_batch, Y_batch, W, b)
+
+    -- numerical grads
+    --local eps = 1e-5
+    --local y1 = linear(X_batch, W, b + torch.Tensor{0,eps,0,0,0})
+    --local y2 = linear(X_batch, W, b - torch.Tensor{0,eps,0,0,0})
+    --print((NLL(y1, Y_batch) - NLL(y2, Y_batch)) / (2 * eps * batch_size))
+    --print(b_grad)
+    --io.read()
+
+    -- update weights
+    W:csub(W_grad:mul(eta))
+    b:csub(b_grad:mul(eta))
+    
+    -- zero padding
+    W:select(2, 1):zero()
 
     -- calculate loss
     local pred = linear(X, W, b)
@@ -163,6 +248,53 @@ function train_logreg(nclasses, nfeatures, X, Y, eta, batch_size, max_epochs, la
       break
     end
     prev_loss = loss
+    epoch = epoch + 1
+  end
+  print('Trained', epoch, 'epochs')
+  return W, b
+end
+
+function train_hinge(nclasses, nfeatures, X, Y, eta, batch_size, max_epochs)
+  eta = eta or 0
+  batch_size = batch_size or 0
+  max_epochs = max_epochs or 0
+  local N = X:size(1)
+
+  -- initialize weights and intercept
+  local W = torch.zeros(nclasses, nfeatures)
+  local b = torch.zeros(nclasses)
+  local epoch = 0
+
+  local loss = 100
+  while loss > 10 and epoch < max_epochs do
+    -- get batch
+    local batch_indices = torch.randperm(N):narrow(1,1,batch_size):long()
+    local X_batch = X:index(1, batch_indices)
+    local Y_batch = Y:index(1, batch_indices)
+
+    -- get gradients
+    local W_grad, b_grad = hinge_grad(X_batch, Y_batch, W, b)
+
+    -- numerical grads
+    --local eps = 1e-5
+    --local y1 = linear(X_batch, W, b + torch.Tensor{0,eps,0,0,0})
+    --local y2 = linear(X_batch, W, b - torch.Tensor{0,eps,0,0,0})
+    --print((NLL(y1, Y_batch) - NLL(y2, Y_batch)) / (2 * eps * batch_size))
+    --print(b_grad)
+    --io.read()
+
+    -- update weights
+    W:csub(W_grad:mul(eta))
+    b:csub(b_grad:mul(eta))
+    
+    -- zero padding
+    W:select(2, 1):zero()
+
+    -- calculate loss
+    local pred = linear(X, W, b)
+    local loss = hinge(pred, Y)
+    print(loss)
+
     epoch = epoch + 1
   end
   print('Trained', epoch, 'epochs')
@@ -215,6 +347,12 @@ function main()
      X = X:index(1, batch_indices)
      Y = Y:index(1, batch_indices)
      W, b = train_logreg(nclasses, nfeatures, X, Y, opt.eta, opt.batch_size, opt.max_epochs, opt.lambda)
+   elseif opt.classifier == 'hinge' then
+     -- sample for faster training
+     --local batch_indices = torch.multinomial(torch.ones(X:size(1)), 100, false):long()
+     --X = X:index(1, batch_indices)
+     --Y = Y:index(1, batch_indices)
+     W, b = train_hinge(nclasses, nfeatures, X, Y, opt.eta, opt.batch_size, opt.max_epochs)
    end
 
    print(W:narrow(2, 1, 10))
