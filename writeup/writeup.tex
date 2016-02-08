@@ -2,30 +2,27 @@
 \documentclass[11pt]{article}
 
 \usepackage{common}
-\title{HW0: Sample Assignment}
-\author{Alexander Rush \\ srush@seas.harvard.edu \and Sam Wiseman \\ swiseman@seas.harvard.edu }
+\title{HW1: Text Classification}
+\author{Rohil Prasad \\ prasad01@college.harvard.edu \and Jeffrey Ling \\ jling@college.harvard.edu }
 \begin{document}
 
 \maketitle{}
 \section{Introduction}
 
-This note lays out our expectation for a homework submission in
-\textit{CS287: Statistical Natural Language Processing}. While you do
-not have to follow this template to the letter, we do expect that
-write-ups have a very clear structure and cover all the elements
-described in this note. With this in mind, the burden is on the
-presenter to demonstrate why deviations from the standard are
-necessary.
+Text classification and sentiment analysis is an old problem with applications ranging from business analytics to finance.
+It is an easy task for humans to tell whether a piece of writing pertaining to some topic speaks positively or negatively about that topic. 
+For example, we know immediately that a movie review containing the phrase ``worst movie ever'' is extremely negative, while the opposite phrase 
+``best movie ever'' indicates an extremely positive review. We are also capable of easily parsing more high-level semantic features such as context and sarcasm.
 
-All write-ups should include a short introduction. In this section you
-should summarize the underlying problem in high-level language and
-describe the extensions that you have decided to propose in your
-implementation. When you describe these extensions you should
-carefully cite the papers of interest. For instance, it will often be
-useful to cite the work seen in class
-\citep{murphy2012machine}. Alternatively, you can also cite papers
-inline, for instance the work of \citet{berger1996maximum}.
+This problem is much more difficult for a computer that cannot naively detect things such as context and sarcasm. However, we can construct supervised learning algorithms that 
+can be used to train good estimators of text sentiment. 
 
+In this paper, we explore three methods of classifying the sentiment of movie reviews from the Stanford Sentiment database. These three methods are Naive Bayes, 
+logistic regression with L2 regularization, and hinge-loss linear SVM with L2 regularization. 
+
+In Section $2$, we introduce our notation and give a description of our problem in formal language. In Section $3$, we describe our three algorithms as implementations of 
+the probabilistic linear model. In Section $4$, we present our experimental results for hyperparameter tuning and algorithm performance. In Section $5$, we conclude with a 
+discussion of our results. 
 
 \section{Problem Description}
 
