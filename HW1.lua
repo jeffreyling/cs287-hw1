@@ -56,6 +56,7 @@ function hinge(pred, Y)
   local N = Y:size(1)
   local err = 0
   for i = 1, N do
+<<<<<<< HEAD
     local val, ind = pred[i]:topk(2, 1, true)
     local x = 0
     if Y[i] == ind[1] then
@@ -142,7 +143,7 @@ function hinge_grad(X_batch, Y_batch, W, b)
 
   local Y_hat, _ = linear(X_batch, W, b)
   -- get gradient w.r.t. z
-  local z_grad = Y_hat:clone()
+  local z_grad = torch.zeros(Y_hat:size(1), Y_hat:size(2))
   for i = 1, N do
       local _, ind = Y_hat[i]:topk(2, 1, true)
       local cprime
@@ -327,7 +328,7 @@ function main()
 
    -- Log results.
    f = io.open(opt.logfile, 'a')
-   f:write(opt.classifier,' ',opt.alpha,' ',opt.eta,' ', opt.batch_size,' ', opt.max_epochs,' ', time,' ', loss,' ', err, '\n')
+   f:write(opt.classifier,' ',opt.alpha,' ',opt.eta,' ', opt.batch_size,' ', opt.max_epochs,' ', time,' ', loss,' ', err,' ',opt.lambda,'\n')
    f:close()
 end
 
