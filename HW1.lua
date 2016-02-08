@@ -237,6 +237,7 @@ function train_reg(nclasses, nfeatures, X, Y, eta, batch_size, max_epochs, lambd
       end
       loss = loss + reg(W, lambda)
       loss = loss / N
+      print('Loss at epoch', epoch, ':', loss)
 
       if torch.abs(prev_loss - loss) / prev_loss < 0.001 then
         prev_loss = loss
