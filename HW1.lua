@@ -5,9 +5,10 @@ cmd = torch.CmdLine()
 
 -- Cmd Args
 cmd:option('-datafile', 'SST1.hdf5', 'data file')
-cmd:option('-classifier', 'nb', 'classifier to use')
+cmd:option('-classifier', 'nb', 'classifier to use: nb, logreg, hinge')
 cmd:option('-logfile', 'log.txt', 'log file')
 cmd:option('-test_weights', '', 'test on valid with weights from file')
+cmd:option('-cross_val', 0, 'do cross validation')
 
 -- Hyperparameters
 cmd:option('-alpha', 2, 'alpha for naive Bayes')
@@ -279,28 +280,35 @@ function test()
   io.read()
 end
 
-function main() 
+function cross_val(X, Y)
+  -- 10 fold cross validation
+  local N = X:size(1)
+
+  local shuffle = torch.randperm(N):long()
+  X = X:index(1, shuffle)
+  Y = Y:index(1, shuffle)
+
+  local fold_scores = {}
+  for fold = 1, 10 do
+      print('==> fold ', fold)
+      -- split train/valid
+      local i_start = math.floor((fold - 1) * 0.1 * N + 1)
+      local i_end = math.floor(fold * 0.1 * N)
+      local valid_X = X:narrow(1, i_start, i_end - i_start + 1)
+      local valid_Y = Y:narrow(1, i_start, i_end - i_start + 1)
+      local train_X = torch.cat(X:narrow(1, 1, i_start), X:narrow(1, i_end, N - i_end + 1), 1)
+      local train_Y = torch.cat(Y:narrow(1, 1, i_start), Y:narrow(1, i_end, N - i_end + 1), 1)
+    
+      local _, err, loss = train(train_X, train_Y, valid_X, valid_Y)
+      print('Fold', fold, 'error:', err)
+      table.insert(fold_scores, err)
+  end
+
+  print('average CV score:', torch.Tensor(fold_scores):mean())
+end
+
+function train(X, Y, valid_X, valid_Y)
    local start = os.clock()
-   -- Parse input params
-   opt = cmd:parse(arg)
-   local f = hdf5.open(opt.datafile, 'r')
-   nclasses = f:read('nclasses'):all():long()[1]
-   nfeatures = f:read('nfeatures'):all():long()[1]
-
-   print('Loading data...')
-   local X = f:read('train_input'):all()
-   local Y = f:read('train_output'):all()
-   local valid_X = f:read('valid_input'):all()
-   local valid_Y = f:read('valid_output'):all()
-   local test_X = f:read('test_input'):all()
-   print('Data loaded.')
-
-   if opt.test_weights ~= '' then
-     local A = torch.load('train.t7')
-     local pred, err = eval(valid_X, valid_Y, A.W, A.b, nclasses)
-     print('Percent correct:', err)
-     os.exit()
-   end
 
    -- Train.
    local W, b, loss
@@ -318,17 +326,47 @@ function main()
    print('Training time:', time, 'seconds')
    print('Loss:', loss)
 
-   print(W:narrow(2, 1, 10))
-   print(b)
-
    -- Test.
    local pred, err = eval(valid_X, valid_Y, W, b, nclasses)
    print('Percent correct:', err)
 
-   -- Log results.
-   f = io.open(opt.logfile, 'a')
-   f:write(opt.classifier,' ',opt.alpha,' ',opt.eta,' ', opt.batch_size,' ', opt.max_epochs,' ', time,' ', loss,' ', err,' ',opt.lambda,'\n')
-   f:close()
+   return pred, err, loss, W, b
+end
+
+function main() 
+   -- Parse input params
+   opt = cmd:parse(arg)
+   local f = hdf5.open(opt.datafile, 'r')
+   nclasses = f:read('nclasses'):all():long()[1]
+   nfeatures = f:read('nfeatures'):all():long()[1]
+
+   print('Loading data...')
+   local X = f:read('train_input'):all()
+   local Y = f:read('train_output'):all()
+
+   if opt.cross_val == 1 then
+     print('Data loaded.')
+     cross_val(X, Y)
+   else 
+     local valid_X = f:read('valid_input'):all()
+     local valid_Y = f:read('valid_output'):all()
+     local test_X = f:read('test_input'):all()
+     print('Data loaded.')
+
+     if opt.test_weights ~= '' then
+       local A = torch.load('train.t7')
+       local pred, err = eval(valid_X, valid_Y, A.W, A.b, nclasses)
+       print('Percent correct:', err)
+       os.exit()
+     end
+
+     local pred, err, loss = train(X, Y, valid_X, valid_Y, opt)
+
+     -- Log results.
+     f = io.open(opt.logfile, 'a')
+     f:write(opt.classifier,' ',opt.alpha,' ',opt.eta,' ', opt.batch_size,' ', opt.max_epochs,' ', time,' ', loss,' ', err,' ',opt.lambda,'\n')
+     f:close()
+   end
 end
 
 main()
