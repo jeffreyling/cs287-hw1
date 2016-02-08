@@ -59,9 +59,9 @@ function hinge(pred, Y)
   local x = 0
   for i = 1, N do
     if Y[i] == ind[i][1] then
-      x = 1 - (val[i][1] + val[i][2])
+      x = 1 - (val[i][1] - val[i][2])
     else
-      x = 1 - (val[i][1] + pred[i][Y[i]])
+      x = 1 - (pred[i][Y[i]] - val[i][1])
     end
     if x > 0 then
       err = err + x
@@ -145,17 +145,10 @@ function hinge_grad(X_batch, Y_batch, W, b)
     end
   end
   -- get gradient w.r.t. z
-  local z_grad = Y_hat:clone()
+  local z_grad = torch.zeros(Y_hat:size(1), Y_hat:size(2))
   for i = 1, N do
-    for j = 1, nclasses do
-      if j == Y_batch[i] then
-        z_grad[i][j] = Y_hat[i][j] - 1  
-      elseif j == non_gold_max[i] then
-        z_grad[i][j] = z_grad[i][j] * -1
-      else
-        z_grad[i][j] = 0
-      end
-    end
+    z_grad[i][Y_batch[i]] = Y_hat[i][Y_batch[i]] - 1
+    z_grad[i][non_gold_max[i]] = Y_hat[i][non_gold_max[i]] * -1
   end
   z_grad:cmul(Y_hat):mul(-1)
 
@@ -322,7 +315,7 @@ function main()
 
    -- Log results.
    f = io.open(opt.logfile, 'a')
-   f:write(opt.classifier,' ',opt.alpha,' ',opt.eta,' ', opt.batch_size,' ', opt.max_epochs,' ', time,' ', loss,' ', err, '\n')
+   f:write(opt.classifier,' ',opt.alpha,' ',opt.eta,' ', opt.batch_size,' ', opt.max_epochs,' ', time,' ', loss,' ', err,' ',opt.lambda,'\n')
    f:close()
 end
 
