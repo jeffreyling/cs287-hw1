@@ -56,7 +56,6 @@ function hinge(pred, Y)
   local N = Y:size(1)
   local err = 0
   for i = 1, N do
-<<<<<<< HEAD
     local val, ind = pred[i]:topk(2, 1, true)
     local x = 0
     if Y[i] == ind[1] then
@@ -115,7 +114,7 @@ function cross_entropy_grad(X_batch, Y_batch, W, b)
 end
 
 function num_grad(X_batch, Y_batch, W, b, W_grad, b_grad, model)
-  local batch_size = X_batch:size(1)
+    local batch_size = X_batch:size(1)
     local eps = 1e-5
     local del = torch.zeros(W:size(1), W:size(2))
     del[3][3] = eps
