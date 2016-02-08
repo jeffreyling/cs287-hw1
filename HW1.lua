@@ -7,13 +7,14 @@ cmd = torch.CmdLine()
 cmd:option('-datafile', 'SST1.hdf5', 'data file')
 cmd:option('-classifier', 'nb', 'classifier to use')
 cmd:option('-logfile', 'log.txt', 'log file')
+cmd:option('-test_weights', '', 'test on valid with weights from file')
 
 -- Hyperparameters
 cmd:option('-alpha', 2, 'alpha for naive Bayes')
-cmd:option('-eta', 0.001, 'learning rate for SGD')
+cmd:option('-eta', 0.01, 'learning rate for SGD')
 cmd:option('-batch_size', 50, 'batch size for SGD')
 cmd:option('-max_epochs', 100, 'max # of epochs for SGD')
-cmd:option('-lambda', 10.0, 'regularization lambda for SGD')
+cmd:option('-lambda', 1.0, 'regularization lambda for SGD')
 
 function train_nb(nclasses, nfeatures, X, Y, alpha)
   -- Trains naive Bayes model
@@ -101,19 +102,32 @@ function cross_entropy_grad(X_batch, Y_batch, W, b)
       z_grad[i][Y_batch[i]] = Y_hat[i][Y_batch[i]] - 1
     end
 
-    -- collapse and compute W, b grads
-    z_grad = z_grad:mean(1):squeeze()
-    local b_grad = z_grad:clone()
+    -- compute W, b grads
+    local b_grad = z_grad:mean(1):squeeze()
     local W_grad = torch.zeros(nclasses, nfeatures)
     for i = 1, N do
-      --print(W_grad:index(2, X_batch[i]:long()))
-      W_grad:indexAdd(2, X_batch[i]:long(), z_grad:view(z_grad:nElement(), 1):expand(nclasses, X_batch[i]:size(1)))
-      --print(W_grad:index(2, X_batch[i]:long()))
-      --io.read()
+        W_grad:indexAdd(2, X_batch[i]:long(), z_grad[i]:view(z_grad[i]:nElement(), 1):expand(nclasses, X_batch:size(2)))
     end
     W_grad:div(N)
 
     return W_grad, b_grad
+end
+
+function num_grad(X_batch, Y_batch, W, b, W_grad, b_grad)
+  local batch_size = X_batch:size(1)
+    local eps = 1e-4
+    local del = torch.zeros(W:size(1), W:size(2))
+    del[3][3] = eps
+    local y1 = linear(X_batch, W + del, b)
+    local y2 = linear(X_batch, W - del, b)
+    print(X_batch)
+    print('Actual', (NLL(y1, Y_batch) - NLL(y2, Y_batch)) / (2 * eps * batch_size))
+    print(W_grad[3][3])
+    local yy1 = linear(X_batch, W, b + torch.Tensor{0,0,eps,0,0})
+    local yy2 = linear(X_batch, W, b - torch.Tensor{0,0,eps,0,0})
+    print('Actual', (NLL(yy1, Y_batch) - NLL(yy2, Y_batch)) / (2 * eps * batch_size))
+    print(b_grad[3])
+    io.read()
 end
 
 function hinge_grad(X_batch, Y_batch, W, b)
@@ -152,7 +166,6 @@ function hinge_grad(X_batch, Y_batch, W, b)
   for i = 1, N do
     W_grad:indexAdd(2, X_batch[i]:long(), z_grad:view(z_grad:nElement(), 1):expand(nclasses, X_batch[i]:size(1)))
   end
-  W_grad:div(N)
 
   return W_grad, b_grad
 end
@@ -182,7 +195,7 @@ function train_reg(nclasses, nfeatures, X, Y, eta, batch_size, max_epochs, lambd
     -- loop through each batch
       for batch = 1, N, batch_size do
           if ((batch - 1) / batch_size) % 100 == 0 then
-            print(batch)
+            print('Sample:', batch)
           end
           local sz = batch_size
           if batch + batch_size > N then
@@ -190,16 +203,6 @@ function train_reg(nclasses, nfeatures, X, Y, eta, batch_size, max_epochs, lambd
           end
           local X_batch = X:narrow(1, batch, sz)
           local Y_batch = Y:narrow(1, batch, sz)
-
-          -- get batch
-          --local batch_indices = torch.zeros(1, batch_size)
-          --if (epoch + 1) * batch_size > N then
-            --indices = torch.randperm(N)
-          --else
-            --batch_indices = indices:narrow(1, epoch * batch_size + 1, batch_size):long()
-          --end
-          --local X_batch = X:index(1, batch_indices)
-          --local Y_batch = Y:index(1, batch_indices)
 
           -- get gradients
           local W_grad, b_grad
@@ -212,24 +215,10 @@ function train_reg(nclasses, nfeatures, X, Y, eta, batch_size, max_epochs, lambd
           W_grad:select(2, 1):zero()
 
           -- numerical grads
-          local eps = 1e-5
-          local del = torch.zeros(W:size(1), W:size(2))
-          del[3][3] = eps
-          local y1 = linear(X_batch, W + del, b)
-          local y2 = linear(X_batch, W - del, b)
-          --local reg1 = reg(W + del, lambda)
-          --local reg2 = reg(W - del, lambda)
-          --print((NLL(y1, Y_batch) + reg1 - NLL(y2, Y_batch) - reg2) / (2 * eps * batch_size))
-          print((NLL(y1, Y_batch) - NLL(y2, Y_batch)) / (2 * eps * batch_size))
-          print(W_grad[3][3])
-          local yy1 = linear(X_batch, W, b + torch.Tensor{0,0,eps,0,0})
-          local yy2 = linear(X_batch, W, b - torch.Tensor{0,0,eps,0,0})
-          print((NLL(yy1, Y_batch) - NLL(yy2, Y_batch)) / (2 * eps * batch_size))
-          print(b_grad[3])
-          io.read()
+          --num_grad(X_batch, Y_batch, W, b, W_grad, b_grad)
 
           -- regularization update
-          W:mul(1 - eta * lambda)
+          W:mul(1 - eta * lambda / sz)
           -- update weights
           W:csub(W_grad:mul(eta))
           b:csub(b_grad:mul(eta))
@@ -247,8 +236,7 @@ function train_reg(nclasses, nfeatures, X, Y, eta, batch_size, max_epochs, lambd
         loss = hinge(pred, Y)
       end
       loss = loss + reg(W, lambda)
-      print(loss)
-      print(b)
+      loss = loss / N
 
       if torch.abs(prev_loss - loss) / prev_loss < 0.001 then
         prev_loss = loss
@@ -278,9 +266,12 @@ function test()
   local X = torch.range(1, 12):reshape(3, 4)
   local W = torch.range(1, 24):reshape(2, 12)
   local b = torch.Tensor{1, 2}
+  print('X W b')
   print(X, W, b)
   local y, z = linear(X, W, b)
+  print('y z')
   print(y, z)
+  io.read()
 end
 
 function main() 
@@ -298,6 +289,13 @@ function main()
    local valid_Y = f:read('valid_output'):all()
    local test_X = f:read('test_input'):all()
    print('Data loaded.')
+
+   if opt.test_weights ~= '' then
+     local A = torch.load('train.t7')
+     local pred, err = eval(valid_X, valid_Y, A.W, A.b, nclasses)
+     print('Percent correct:', err)
+     os.exit()
+   end
 
    -- Train.
    local W, b, loss
