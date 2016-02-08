@@ -84,6 +84,7 @@ function linear(X, W, b)
   logsoftmax:csub(max:expand(logsoftmax:size(1), logsoftmax:size(2)))
   logsoftmax = torch.exp(logsoftmax):sum(2):log()
   logsoftmax:add(max:expand(logsoftmax:size(1), logsoftmax:size(2)))
+
   local Y_hat = z:clone()
   Y_hat:csub(logsoftmax:expand(Y_hat:size(1), Y_hat:size(2)))
   Y_hat:exp()
@@ -93,7 +94,7 @@ end
 function cross_entropy_grad(X_batch, Y_batch, W, b)
     local N = X_batch:size(1)
 
-    local Y_hat, z = linear(X_batch, W, b)
+    local Y_hat, _ = linear(X_batch, W, b)
     -- get gradient w.r.t. z
     local z_grad = Y_hat:clone()
     for i = 1, N do
@@ -105,7 +106,10 @@ function cross_entropy_grad(X_batch, Y_batch, W, b)
     local b_grad = z_grad:clone()
     local W_grad = torch.zeros(nclasses, nfeatures)
     for i = 1, N do
+      --print(W_grad:index(2, X_batch[i]:long()))
       W_grad:indexAdd(2, X_batch[i]:long(), z_grad:view(z_grad:nElement(), 1):expand(nclasses, X_batch[i]:size(1)))
+      --print(W_grad:index(2, X_batch[i]:long()))
+      --io.read()
     end
     W_grad:div(N)
 
@@ -204,23 +208,28 @@ function train_reg(nclasses, nfeatures, X, Y, eta, batch_size, max_epochs, lambd
           elseif model == 'hinge' then
             W_grad, b_grad = hinge_grad(X_batch, Y_batch, W, b)
           end
+          -- zero padding
+          W_grad:select(2, 1):zero()
 
           -- numerical grads
-          --local eps = 1e-5
-          --local del = torch.zeros(W:size(1), W:size(2))
-          --del[3][3] = eps
-          --local y1 = linear(X_batch, W + del, b)
-          --local y2 = linear(X_batch, W - del, b)
+          local eps = 1e-5
+          local del = torch.zeros(W:size(1), W:size(2))
+          del[3][3] = eps
+          local y1 = linear(X_batch, W + del, b)
+          local y2 = linear(X_batch, W - del, b)
           --local reg1 = reg(W + del, lambda)
           --local reg2 = reg(W - del, lambda)
           --print((NLL(y1, Y_batch) + reg1 - NLL(y2, Y_batch) - reg2) / (2 * eps * batch_size))
-          --print((NLL(y1, Y_batch) - NLL(y2, Y_batch)) / (2 * eps * batch_size))
-          --print(W_grad[3][3])
-          --io.read()
+          print((NLL(y1, Y_batch) - NLL(y2, Y_batch)) / (2 * eps * batch_size))
+          print(W_grad[3][3])
+          local yy1 = linear(X_batch, W, b + torch.Tensor{0,0,eps,0,0})
+          local yy2 = linear(X_batch, W, b - torch.Tensor{0,0,eps,0,0})
+          print((NLL(yy1, Y_batch) - NLL(yy2, Y_batch)) / (2 * eps * batch_size))
+          print(b_grad[3])
+          io.read()
 
           -- regularization update
           W:mul(1 - eta * lambda)
-          b:mul(1 - eta * lambda)
           -- update weights
           W:csub(W_grad:mul(eta))
           b:csub(b_grad:mul(eta))
@@ -239,62 +248,18 @@ function train_reg(nclasses, nfeatures, X, Y, eta, batch_size, max_epochs, lambd
       end
       loss = loss + reg(W, lambda)
       print(loss)
+      print(b)
 
-      if torch.abs(prev_loss - loss) < 0.1 then
+      if torch.abs(prev_loss - loss) / prev_loss < 0.001 then
+        prev_loss = loss
         break
       end
       prev_loss = loss
       epoch = epoch + 1
+      torch.save('train.t7', { W = W, b = b})
   end
   print('Trained', epoch, 'epochs')
-  return W, b, loss
-end
-
-function train_hinge(nclasses, nfeatures, X, Y, eta, batch_size, max_epochs)
-  eta = eta or 0
-  batch_size = batch_size or 0
-  max_epochs = max_epochs or 0
-  local N = X:size(1)
-
-  -- initialize weights and intercept
-  local W = torch.zeros(nclasses, nfeatures)
-  local b = torch.zeros(nclasses)
-  local epoch = 0
-
-  local loss = 100
-  while loss > 10 and epoch < max_epochs do
-    -- get batch
-    local batch_indices = torch.randperm(N):narrow(1,1,batch_size):long()
-    local X_batch = X:index(1, batch_indices)
-    local Y_batch = Y:index(1, batch_indices)
-
-    -- get gradients
-    local W_grad, b_grad = hinge_grad(X_batch, Y_batch, W, b)
-
-    -- numerical grads
-    --local eps = 1e-5
-    --local y1 = linear(X_batch, W, b + torch.Tensor{0,eps,0,0,0})
-    --local y2 = linear(X_batch, W, b - torch.Tensor{0,eps,0,0,0})
-    --print((NLL(y1, Y_batch) - NLL(y2, Y_batch)) / (2 * eps * batch_size))
-    --print(b_grad)
-    --io.read()
-
-    -- update weights
-    W:csub(W_grad:mul(eta))
-    b:csub(b_grad:mul(eta))
-    
-    -- zero padding
-    W:select(2, 1):zero()
-
-    -- calculate loss
-    local pred = linear(X, W, b)
-    loss = hinge(pred, Y)
-    print(loss)
-
-    epoch = epoch + 1
-  end
-  print('Trained', epoch, 'epochs')
-  return W, b, loss
+  return W, b, prev_loss
 end
 
 function eval(X, Y, W, b, nclasses)
