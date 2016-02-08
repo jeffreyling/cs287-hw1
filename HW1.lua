@@ -206,7 +206,7 @@ function train_logreg(nclasses, nfeatures, X, Y, eta, batch_size, max_epochs)
 
     -- calculate loss
     local pred = linear(X, W, b)
-    local loss = NLL(pred, Y)
+    loss = NLL(pred, Y)
     print(loss)
 
     epoch = epoch + 1
@@ -253,7 +253,7 @@ function train_hinge(nclasses, nfeatures, X, Y, eta, batch_size, max_epochs)
 
     -- calculate loss
     local pred = linear(X, W, b)
-    local loss = hinge(pred, Y)
+    loss = hinge(pred, Y)
     print(loss)
 
     epoch = epoch + 1
