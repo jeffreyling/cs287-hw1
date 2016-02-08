@@ -11,7 +11,7 @@ cmd:option('-test_weights', '', 'test on valid with weights from file')
 cmd:option('-cross_val', 0, 'do cross validation')
 
 -- Hyperparameters
-cmd:option('-alpha', 2, 'alpha for naive Bayes')
+cmd:option('-alpha', 1, 'alpha for naive Bayes')
 cmd:option('-eta', 0.01, 'learning rate for SGD')
 cmd:option('-batch_size', 50, 'batch size for SGD')
 cmd:option('-max_epochs', 100, 'max # of epochs for SGD')
@@ -223,7 +223,7 @@ function train_reg(nclasses, nfeatures, X, Y, eta, batch_size, max_epochs, lambd
           --num_grad(X_batch, Y_batch, W, b, W_grad, b_grad, model)
 
           -- regularization update
-          W:mul(1 - eta * lambda / sz)
+          W:mul(1 - eta * lambda * sz / N)
           -- update weights
           W:csub(W_grad:mul(eta))
           b:csub(b_grad:mul(eta))
