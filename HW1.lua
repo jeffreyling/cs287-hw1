@@ -264,7 +264,7 @@ end
 
 function eval(X, Y, W, b, nclasses)
   -- Returns error from Y
-  local _, pred = linear(X, W, b)
+  local pred, _ = linear(X, W, b)
   
   -- Compute error from Y
   local _, argmax = torch.max(pred, 2)
