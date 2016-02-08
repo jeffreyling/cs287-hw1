@@ -247,59 +247,12 @@ function train_reg(nclasses, nfeatures, X, Y, eta, batch_size, max_epochs, lambd
       epoch = epoch + 1
   end
   print('Trained', epoch, 'epochs')
-  return W, b, loss
-end
-
-function train_hinge(nclasses, nfeatures, X, Y, eta, batch_size, max_epochs)
-  eta = eta or 0
-  batch_size = batch_size or 0
-  max_epochs = max_epochs or 0
-  local N = X:size(1)
-
-  -- initialize weights and intercept
-  local W = torch.zeros(nclasses, nfeatures)
-  local b = torch.zeros(nclasses)
-  local epoch = 0
-
-  local loss = 100
-  while loss > 10 and epoch < max_epochs do
-    -- get batch
-    local batch_indices = torch.randperm(N):narrow(1,1,batch_size):long()
-    local X_batch = X:index(1, batch_indices)
-    local Y_batch = Y:index(1, batch_indices)
-
-    -- get gradients
-    local W_grad, b_grad = hinge_grad(X_batch, Y_batch, W, b)
-
-    -- numerical grads
-    --local eps = 1e-5
-    --local y1 = linear(X_batch, W, b + torch.Tensor{0,eps,0,0,0})
-    --local y2 = linear(X_batch, W, b - torch.Tensor{0,eps,0,0,0})
-    --print((NLL(y1, Y_batch) - NLL(y2, Y_batch)) / (2 * eps * batch_size))
-    --print(b_grad)
-    --io.read()
-
-    -- update weights
-    W:csub(W_grad:mul(eta))
-    b:csub(b_grad:mul(eta))
-    
-    -- zero padding
-    W:select(2, 1):zero()
-
-    -- calculate loss
-    local pred = linear(X, W, b)
-    loss = hinge(pred, Y)
-    print(loss)
-
-    epoch = epoch + 1
-  end
-  print('Trained', epoch, 'epochs')
-  return W, b, loss
+  return W, b, prev_loss
 end
 
 function eval(X, Y, W, b, nclasses)
   -- Returns error from Y
-  local _, pred = linear(X, W, b)
+  local pred, _ = linear(X, W, b)
   
   -- Compute error from Y
   local _, argmax = torch.max(pred, 2)
