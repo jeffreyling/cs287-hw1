@@ -55,13 +55,13 @@ function hinge(pred, Y)
   -- returns hinge error.
   local N = Y:size(1)
   local err = 0
-  val, ind = pred:topk(2, true)
-  local x = 0
   for i = 1, N do
-    if Y[i] == ind[i][1] then
-      x = 1 - (val[i][1] + val[i][2])
+    local val, ind = pred[i]:topk(2, 1, true)
+    local x = 0
+    if Y[i] == ind[1] then
+      x = 1 - (pred[i][Y[i]] - val[2])
     else
-      x = 1 - (val[i][1] + pred[i][Y[i]])
+      x = 1 - (pred[i][Y[i]] - val[1])
     end
     if x > 0 then
       err = err + x
@@ -113,19 +113,26 @@ function cross_entropy_grad(X_batch, Y_batch, W, b)
     return W_grad, b_grad
 end
 
-function num_grad(X_batch, Y_batch, W, b, W_grad, b_grad)
+function num_grad(X_batch, Y_batch, W, b, W_grad, b_grad, model)
   local batch_size = X_batch:size(1)
-    local eps = 1e-4
+    local eps = 1e-5
     local del = torch.zeros(W:size(1), W:size(2))
     del[3][3] = eps
     local y1 = linear(X_batch, W + del, b)
     local y2 = linear(X_batch, W - del, b)
+
+    local loss_f
+    if model == 'logreg' then
+      loss_f = NLL
+    elseif model == 'hinge' then
+      loss_f = hinge
+    end
     print(X_batch)
-    print('Actual', (NLL(y1, Y_batch) - NLL(y2, Y_batch)) / (2 * eps * batch_size))
+    print('Actual W', (loss_f(y1, Y_batch) - loss_f(y2, Y_batch)) / (2 * eps * batch_size))
     print(W_grad[3][3])
     local yy1 = linear(X_batch, W, b + torch.Tensor{0,0,eps,0,0})
     local yy2 = linear(X_batch, W, b - torch.Tensor{0,0,eps,0,0})
-    print('Actual', (NLL(yy1, Y_batch) - NLL(yy2, Y_batch)) / (2 * eps * batch_size))
+    print('Actual b', (loss_f(yy1, Y_batch) - loss_f(yy2, Y_batch)) / (2 * eps * batch_size))
     print(b_grad[3])
     io.read()
 end
@@ -133,39 +140,36 @@ end
 function hinge_grad(X_batch, Y_batch, W, b)
   local N = X_batch:size(1)
 
-  local Y_hat, z = linear(X_batch, W, b)
-  -- get the hinge classes
-  local val, ind = Y_hat:topk(2, true)
-  local non_gold_max = torch.zeros(N, 1)
-  for i = 1, N do
-    if Y_hat[Y_batch[i]] ~= val[i][1] then
-      non_gold_max[i] = ind[i][1]
-    else
-      non_gold_max[i] = ind[i][2]
-    end
-  end
+  local Y_hat, _ = linear(X_batch, W, b)
   -- get gradient w.r.t. z
   local z_grad = Y_hat:clone()
   for i = 1, N do
-    for j = 1, nclasses do
-      if j == Y_batch[i] then
-        z_grad[i][j] = Y_hat[i][j] - 1  
-      elseif j == non_gold_max[i] then
-        z_grad[i][j] = z_grad[i][j] * -1
+      local _, ind = Y_hat[i]:topk(2, 1, true)
+      local cprime
+      if Y_batch[i] == ind[1] then
+        cprime = ind[2]
       else
-        z_grad[i][j] = 0
+        cprime = ind[1]
       end
-    end
-  end
-  z_grad:cmul(Y_hat):mul(-1)
+      local y_c = Y_hat[i][Y_batch[i]]
+      local y_cprime = Y_hat[i][cprime]
 
-  -- collapse and compute W, b grads
-  z_grad = z_grad:mean(1):squeeze()
-  local b_grad = z_grad:clone()
+      if y_c - y_cprime < 1 then
+        z_grad[i] = z_grad[i]:mul(y_c - y_cprime)
+        z_grad[i][Y_batch[i]] = z_grad[i][Y_batch[i]] - y_c
+        z_grad[i][cprime] = z_grad[i][cprime] + y_cprime
+      else
+        z_grad[i]:zero()
+      end
+  end
+
+  -- compute W, b grads
+  local b_grad = z_grad:mean(1):squeeze()
   local W_grad = torch.zeros(nclasses, nfeatures)
   for i = 1, N do
-    W_grad:indexAdd(2, X_batch[i]:long(), z_grad:view(z_grad:nElement(), 1):expand(nclasses, X_batch[i]:size(1)))
+      W_grad:indexAdd(2, X_batch[i]:long(), z_grad[i]:view(z_grad[i]:nElement(), 1):expand(nclasses, X_batch:size(2)))
   end
+  W_grad:div(N)
 
   return W_grad, b_grad
 end
@@ -215,7 +219,7 @@ function train_reg(nclasses, nfeatures, X, Y, eta, batch_size, max_epochs, lambd
           W_grad:select(2, 1):zero()
 
           -- numerical grads
-          --num_grad(X_batch, Y_batch, W, b, W_grad, b_grad)
+          --num_grad(X_batch, Y_batch, W, b, W_grad, b_grad, model)
 
           -- regularization update
           W:mul(1 - eta * lambda / sz)
