@@ -28,7 +28,7 @@ discussion of our results.
 
 We arrange the training data into pairs $x_i, y_i$ for $i = 1, \ldots, N$. For brevity we call each data point $x, y$, where $x$ is a sentence and $y \in \mcY$ is the sentiment class of the sentence, and $\mcY$ is a finite set.
 
-We represent $x$ by its features $x \in \{0, 1\}^f$. In this homework, we featurize a sentence as a bag of words, i.e. a feature $x_j = 1$ iff the word corresponding to index $j$ is in the sentence. The index $j$ indexes into the vocabulary $\mcV$ of the training and testing dataset.
+We represent $x$ by its features $x \in \{0, 1\}^f$. In this homework, we featurize a sentence as a bag of unigrams, i.e. a feature $x_j = 1$ iff the word corresponding to index $j$ is in the sentence. The index $j$ indexes into the vocabulary $\mcV$ of the training and testing dataset.
 
 Our goal is to predict the correct class $c$ by learning a function $f : \{0, 1\}^f \to \mcY$, where $\widehat{y}_k = f(x)$ is the predicted probability $p(k | x)$ of $x$ belonging to class $k$. We will do this through some linear models.
 
@@ -115,7 +115,7 @@ where $\mathbf{g}$ is the computed gradient, $m$ is the batch size, and $N$ is t
 
 For the batches, we shuffle the training data once, then iterate through it one batch at a time. One sweep of the entire data is a single epoch. We picked a stopping criterion as
 $$\frac{| loss - prevLoss |}{prevLoss} < 0.001$$
-where the losses are computed over the training set at the end of each epoch.
+where the losses are computed over the validation set at the end of each epoch.
 
 \subsection{Hinge-loss Linear SVM}
 
@@ -157,9 +157,9 @@ The gradient descent method is the same as before.
 
 \section{Experiments}
 
-We run grid search on SST1 and discovered that ....
+We ran several hyperparameter settings on SST1 and discovered the following optimal settings for each model: for MNB, $\alpha = 1.0$; for logistic regression, $\eta = 0.1, \lambda = 1.0$; for hinge loss, $\eta = 0.1, \lambda = 0.1$. We used batch size of 50 and ran for a maximum of 50 epochs for all experiments.
 
-With these hyperparameters, we run experiments on the validation sets of SST1 and SST2 and report the percentage of samples predicted correctly. We implement 10-fold cross validation on MPQA and Subj (which do not come with validation sets) to find the average performance over folds.
+With these hyperparameters, we run experiments on the validation sets of SST1 and SST2 and report the percentage of samples predicted correctly. We implement 10-fold cross validation on MPQA and Subj (which do not come with validation sets) to find the average performance over folds. Note that SST1 has 5 classes, while other datasets are binary.
 
 \begin{table}[h]
 \centering
@@ -167,15 +167,15 @@ With these hyperparameters, we run experiments on the validation sets of SST1 an
  \toprule
  Model &  & SST1 & SST2 & MPQA & Subj \\
  \midrule
- \textsc{MNB} & & 0.45\\
- \textsc{Logistic} & & 2.59 \\
- \textsc{Linear SVM} & & 10.59  \\
+ \textsc{MNB} & & 39.9 & 80.6 & 83.8 & 92.2 \\
+ \textsc{Logistic} & & 39.2 & 78.9 & 71.0 & 87.9 \\
+ \textsc{Linear SVM} & &  & &  \\
  \bottomrule
 \end{tabular}
-\caption{\label{tab:results} Results with PARAMETERS HERE.}
+\caption{\label{tab:results} Results with optimal hyperparameters.}
 \end{table}
 
-% Comparison with baselines?
+These results are slightly worse than the baselines reported in Wang and Manning (2012). For naive Bayes, we hypothesize that our shuffling of data in cross-validation may have affected the performance. For regression, this is probably because we did not have time to run gradient descent to its full optimum, and we also may have used different batch sizes in gradient descent.
 
 % Timing
 
@@ -189,11 +189,14 @@ With these hyperparameters, we run experiments on the validation sets of SST1 an
 
 \section{Conclusion}
 
-End the write-up with a very short recap of the main experiments and the main results. Describe any challenges you may have faced, and what could have been improved in the model.
+%End the write-up with a very short recap of the main experiments and the main results. Describe any challenges you may have faced, and what could have been improved in the model.
+
+In this homework we implemented basic linear models for text classification. We almost achieved several baselines, though our implementation was slightly worse in performance.
 
 One challenge we ran into was debugging gradient descent. In order to troubleshoot our models, computing numerical gradients turned out to be extremely helpful in discovering where our gradients were being computed incorrectly. We recommend that any gradient-based method come with a test to ensure that gradients are being computed correctly.
 
 \bibliographystyle{apalike}
 \bibliography{writeup}
+Wang, Sida, and Christopher D. Manning. "Baselines and bigrams: Simple, good sentiment and topic classification." Proceedings of the 50th Annual Meeting of the Association for Computational Linguistics: Short Papers-Volume 2. Association for Computational Linguistics, 2012.
 
 \end{document}
