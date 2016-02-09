@@ -17,7 +17,7 @@ For example, we know immediately that a movie review containing the phrase ``wor
 This problem is much more difficult for a computer that cannot naively detect things such as context and sarcasm. However, we can construct supervised learning algorithms that 
 can be used to train good estimators of text sentiment. 
 
-In this paper, we explore three methods of classifying the sentiment of movie reviews from the Stanford Sentiment database. These three methods are Naive Bayes, 
+In this paper, we explore three methods of classifying the sentiment of movie reviews from the Stanford Sentiment database. These three methods are multinomial naive Bayes, 
 logistic regression with L2 regularization, and hinge-loss linear SVM with L2 regularization. 
 
 In Section $2$, we introduce our notation and give a description of our problem in formal language. In Section $3$, we describe our three algorithms as implementations of 
@@ -26,26 +26,32 @@ discussion of our results.
 
 \section{Problem Description}
 
-In general, homeworks will be specified using informal
-language. As part of the assignment, we expect you to write-out a
-definition of the problem and your model in formal language. For this
-class, we will use the following notation:
+We arrange the training data into pairs $x_i, y_i$ for $i = 1, \ldots, N$. For brevity we call each data point $x, y$, where $x$ is a sentence and $y \in \mcY$ is the sentiment class of the sentence, and $\mcY$ is a finite set.
 
-\begin{itemize}
-\item $\boldb, \boldm$;  bold letters for vectors.
-\item $\boldB, \boldM$;  bold capital letters for matrices.
-\item $\mcB, \mcM$;  script-case for sets.
-\item $b_i, x_i$; lower case for scalars or indexing into vectors.
-\end{itemize}
+We represent $x$ by its features $x \in \{0, 1\}^f$. In this homework, we featurize a sentence as a bag of words, i.e. a feature $x_j = 1$ iff the word corresponding to index $j$ is in the sentence. The index $j$ indexes into the vocabulary $\mcV$ of the training and testing dataset.
 
+Our goal is to predict the correct class $c$ by learning a function $f : \{0, 1\}^f \to \mcY$, where $\widehat{y}_k = f(x)$ is the predicted probability $p(k | x)$ of $x$ belonging to class $k$. We will do this through some linear models.
 
-For instance in natural language processing, it is common to use
-discrete sets like $\mcV$ for the vocabulary of the language, or $\mcT$ for a
-tag set of the language.  We might also want one-hot vectors
-representing words. These will be of the type
-$\boldv \in \{0,1\}^{|\mcV|}$. In a note, it is crucial to define the
-types of all variables that are introduced. The problem description is the
-right place to do this.
+%In general, homeworks will be specified using informal
+%language. As part of the assignment, we expect you to write-out a
+%definition of the problem and your model in formal language. For this
+%class, we will use the following notation:
+%
+%\begin{itemize}
+%\item $\boldb, \boldm$;  bold letters for vectors.
+%\item $\boldB, \boldM$;  bold capital letters for matrices.
+%\item $\mcB, \mcM$;  script-case for sets.
+%\item $b_i, x_i$; lower case for scalars or indexing into vectors.
+%\end{itemize}
+%
+%
+%For instance in natural language processing, it is common to use
+%discrete sets like $\mcV$ for the vocabulary of the language, or $\mcT$ for a
+%tag set of the language.  We might also want one-hot vectors
+%representing words. These will be of the type
+%$\boldv \in \{0,1\}^{|\mcV|}$. In a note, it is crucial to define the
+%types of all variables that are introduced. The problem description is the
+%right place to do this.
 
 % NLP is also
 % full of sequences. For instance sentences, $w_1, \ldots, w_N$, where
@@ -60,110 +66,132 @@ right place to do this.
 
 \section{Model and Algorithms}
 
-Here you specify the model itself. This section should formally
-describe the model used to solve the task proposed in the previous
-section. This section should try to avoid introducing new vocabulary
-or notation, when possible use the notation from the previous section.
-Feel free to use the notation from class, but try to make the note
-understandable as a standalone piece of text.
+We use three models in this experiment:
 
-This section is also a great place to include other material that
-describes the underlying structure and choices of your model, for
-instance here are some example tables and algorithms from full
-research papers:
+\begin{enumerate}
+\item multinomial naive Bayes (MNB)
+\item logistic regression with L2 regularization
+\item hinge-loss linear SVM with L2 regularization 
+\end{enumerate}
+
+We describe the setup of each.
+
+\subsection{Multinomial Naive Bayes}
+
+In MNB, we assume that the features of $x$ are independent of each other. Specifically, in order to obtain $p(y | x)$, the probability of class $y$ given input $x$, we apply Bayes rule to get
+$$p(y | x) = \frac{p(x | y)p(y)}{p(x)}$$
+or in log space,
+$$\log p(y | x) = \log p(x | y) + \log p(y) - \log p(x)$$
+with prediction given by
+$$\widehat{y} = \argmax_y p(y|x)$$
+Since $p(x)$ is a constant function of $y$, we can omit it from our predictor, so it suffices to learn $p(x | y)$ and $p(y)$.
+
+If $x$ is represented as binary features $x_1, \ldots, x_k$, then under the independence assumption we have
+$$p(x | y) = p(x_1, \ldots, x_k | y) = p(x_1 | y) \cdots p(x_k | y)$$
+The parameters are thus $p(x_f | y)$, which under negative log-likelihood loss, is maximized over the training data by counting the number of samples with $x_f$ in class $y$ and dividing by the total number of samples from class $y$.
+
+Similarly, the MLE estimate of $p(y)$ is the proportion of training samples that are of class $y$. Thus, our prediction is
+$$\widehat{y} = \argmax_y \sum_i \log p(x_i | y) + \log p(y)$$
+
+The sum is taken over features that appear in $x$. Note that this has the form of a linear model with linear weights $W$ as the $\log p(x_i | y)$ and intercept $b$ as $\log p(y)$.
+
+In our task, if we write $x$ in its sparse feature representation with each feature being an indicator of a word, we can write $\widehat{y} = xW + b$.
+
+\subsection{Logistic Regression}
+
+In logistic regression, we assume $z = xW + b$, where $x$ is the feature representation of the data point. We then perform the softmax function to obtain $\widehat{y_i} = e^{z_i} / \sum_{z'} e^{z'}$ which gives $\widehat{y_i} = p(y_i | x)$.
+
+Our criterion function here is the negative log-likelihood loss, plus a regularization term:
+$$L(X, Y; W, b) = \sum_x -\log \widehat{y}_c + \frac{\lambda}{2} {\lVert W \rVert}^2$$
+where $\widehat{y}_c$ is the predicted probability for the correct class $c$ for a given $x$. $\lambda$ is a hyperparameter that can be tuned.
+
+We optimize the loss over the training set with gradient descent. We have that
+$$\frac{\partial L}{\partial W_{i,j}} = x_j \frac{\partial L}{\partial z_i}, \frac{\partial L}{\partial b_i} = \frac{\partial L}{\partial z_i}$$
+where $\partial L / \partial z_i$ equals the predicted $\widehat{y_i}$ under softmax, except $\partial L / \partial z_c = \widehat{y_c} - 1$.
+
+We perform minibatch gradient descent with batch size a tunable hyperparameter. For each batch, we take the average gradient of the samples in the batch. Each gradient descent step is a combination of regularization shrinkage and subtracting of the computed gradient:
+$$\theta \leftarrow (1 - \eta \lambda m / N) \theta - \eta \mathbf{g}$$
+where $\mathbf{g}$ is the computed gradient, $m$ is the batch size, and $N$ is the number of training points.
+
+For the batches, we shuffle the training data once, then iterate through it one batch at a time. One sweep of the entire data is a single epoch. We picked a stopping criterion as
+$$\frac{| loss - prevLoss |}{prevLoss} < 0.001$$
+where the losses are computed over the training set at the end of each epoch.
+
+\subsection{Hinge-loss Linear SVM}
+
+The hinge loss model is exactly the same as logistic regression, except instead of negative log likelihood loss, we use the hinge loss, defined as
+$$L(y, \widehat{y}) = \max(0, 1 - (\widehat{y}_c - \widehat{y}_{c'}))$$
+where $c$ is the correct class and $c' = \argmax_{c' \neq c} \widehat{y}_{c'}$.
+
+So our overall criterion is
+$$L(X, Y; W, b) = \sum_x \max(0, 1 - (\widehat{y}_c - \widehat{y}_{c'})) + \frac{\lambda}{2} \lVert W \rVert ^2$$
+
+The gradients in this case have the same form as in logistic regression, except $\partial L / \partial z_i$ changes. We compute these to be:
+$$\frac{\partial L}{\partial z_i} = \begin{cases} 0 \indent \widehat{y}_c - \widehat{y}_{c'} > 1 \\
+ \widehat{y}_i(\widehat{y}_c - \widehat{y}_{c'}) - \widehat{y}_c \indent i = c \\
+\widehat{y}_i(\widehat{y}_c - \widehat{y}_{c'}) + \widehat{y}_{c'} \indent i = c' \\
+\widehat{y}_i(\widehat{y}_c - \widehat{y}_{c'}) \indent else \end{cases}$$
+
+The gradient descent method is the same as before.
 
 
-
-\begin{itemize}
-\item diagrams of your model,
-
-  \begin{center}
-    \includegraphics[width=0.4\textwidth]{network}
-  \end{center}
-\item feature tables,
-
-  \begin{center}
-    \begin{tabular}{@{}lll@{}}
-      \toprule
-      &\multicolumn{2}{c}{Mention Features  } \\
-      & Feature & Value Set\\
-      \midrule
-      & Mention Head & $\mcV$ \\
-      & Mention First Word & $\mcV$ \\
-      & Mention Last Word & $\mcV$ \\
-      & Word Preceding Mention & $\mcV$ \\
-      & Word Following Mention & $\mcV$\\
-      & \# Words in Mention & $\{1, 2, \ldots \}$ \\
-      & Mention Type & $\mathcal{T}$ \\
-      \bottomrule
-    \end{tabular}
-  \end{center}
-
-\item pseudo-code,
+\begin{figure}
 
   \begin{algorithmic}[1]
-    \Procedure{Linearize}{$x_1\ldots x_N$, $K$, $g$}
-    \State{$B_0 \gets \langle (\langle \rangle, \{1, \ldots, N\}, 0, \boldh_0, \mathbf{0})  \rangle$}
-    \For{$m = 0, \ldots, M-1$ }
-    \For{$k = 1, \ldots, |B_m|$}
-    \For{$i \in \mcR$}
-    \State{$(y, \mcR, s, \boldh) \gets \mathrm{copy}(B_m^{(k)})$}
-    \For{word $w$ in phrase $x_i$}
-    \State{$y \gets y $ append $w$ }
-    \State{$s \gets s + \log q(w, \boldh) $ }
-    \State{$\boldh \gets \delta(w, \boldh)$}
-    \EndFor{}
-    \State{$B_{m+|w_i|} \gets B_{m+|w_i|} + (y, \mcR - i, s,   \boldh)$}
-    \State{keep top-$K$ of $B_{m+|w_i|}$ by $f(x, y) + g(\mcR)$}
-    \EndFor{}
-    \EndFor{}
-    \EndFor{}
-    \State{\Return{$B_{M}^{(k)}$}}
+    \Procedure{GradientDescent}{$\{ X_i \}$,  $\{ y_i \} $}
+	\State{$W, b \gets 0$}
+	\While{stopping condition not met}
+		\State{randomly sample batch of size $m$}
+		\State{$\mathbf{g_W} \gets \partial L / \partial W_{ij}$}
+		\State{$\mathbf{g_b} \gets \partial L / \partial b$}
+		\State{$W \gets (1 - \eta \lambda m / N) W - \eta \mathbf{g_W}$}
+		\State{$b \gets b - \eta \mathbf{g_b}$}
+
+    \EndWhile{}
+    \State{\Return{$W, b$}}
     \EndProcedure{}
   \end{algorithmic}
 
-\end{itemize}
+\end{figure}
 
 
 \section{Experiments}
 
-Finally we end with the experimental section. Each assignment will make clear the main experiments and baselines that you should run. For these experiments you should present a main results table. Here we give a sample Table~\ref{tab:results}. In addition to these results you should describe in words what the table shows and the relative performance of the models.
+We run grid search on SST1 and discovered that ....
 
-Besides the main results we will also ask you to present other results
-comparing particular aspects of the models. For instance, for word
-embedding experiments, we may ask you to show a chart of the projected
-word vectors. This experiment will lead to something like
-Figure~\ref{fig:clusters}. This should also be described within the
-body of the text itself.
-
+With these hyperparameters, we run experiments on the validation sets of SST1 and SST2 and report the percentage of samples predicted correctly. We implement 10-fold cross validation on MPQA and Subj (which do not come with validation sets) to find the average performance over folds.
 
 \begin{table}[h]
 \centering
-\begin{tabular}{llr}
+\begin{tabular}{llcccc}
  \toprule
- Model &  & Acc. \\
+ Model &  & SST1 & SST2 & MPQA & Subj \\
  \midrule
- \textsc{Baseline 1} & & 0.45\\
- \textsc{Baseline 2} & & 2.59 \\
- \textsc{Model 1} & & 10.59  \\
- \textsc{Model 2} & &13.42 \\
- \textsc{Model 3} & & 7.49\\
+ \textsc{MNB} & & 0.45\\
+ \textsc{Logistic} & & 2.59 \\
+ \textsc{Linear SVM} & & 10.59  \\
  \bottomrule
 \end{tabular}
-\caption{\label{tab:results} Table with the main results.}
+\caption{\label{tab:results} Results with PARAMETERS HERE.}
 \end{table}
 
+% Comparison with baselines?
 
-\begin{figure}
-  \centering
-  \includegraphics[width=6cm]{cluster_viz}
-  \caption{\label{fig:clusters} Sample qualitative chart.}
-\end{figure}
+% Timing
+
+% Gradient descent is working curves
+%%\begin{figure}
+%  \centering
+%  \includegraphics[width=6cm]{cluster_viz}
+%  \caption{\label{fig:clusters} Sample qualitative chart.}
+%\end{figure}
 
 
 \section{Conclusion}
 
 End the write-up with a very short recap of the main experiments and the main results. Describe any challenges you may have faced, and what could have been improved in the model.
+
+One challenge we ran into was debugging gradient descent. In order to troubleshoot our models, computing numerical gradients turned out to be extremely helpful in discovering where our gradients were being computed incorrectly. We recommend that any gradient-based method come with a test to ensure that gradients are being computed correctly.
 
 \bibliographystyle{apalike}
 \bibliography{writeup}
