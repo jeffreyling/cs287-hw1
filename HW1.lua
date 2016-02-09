@@ -263,8 +263,12 @@ function eval(X, Y, W, b, nclasses)
   -- Compute error from Y
   local _, argmax = torch.max(pred, 2)
   argmax:squeeze()
-  local err = argmax:eq(Y:long()):sum()
-  err = err / Y:size(1)
+
+  local err
+  if Y then
+    err = argmax:eq(Y:long()):sum()
+    err = err / Y:size(1)
+  end
   return argmax, err
 end
 
@@ -330,7 +334,7 @@ function train(X, Y, valid_X, valid_Y)
    local pred, err = eval(valid_X, valid_Y, W, b, nclasses)
    print('Percent correct:', err)
 
-   return pred, err, loss, W, b
+   return pred, err, loss, time, W, b
 end
 
 function main() 
@@ -360,7 +364,15 @@ function main()
        os.exit()
      end
 
-     local pred, err, loss = train(X, Y, valid_X, valid_Y, opt)
+     local pred, err, loss, time, W, b = train(X, Y, valid_X, valid_Y, opt)
+
+     -- Test
+     local pred = eval(test_X, nil, W, b, nclasses)
+     f = io.open('SST1.test', 'w')
+     f:write("ID,Category\n")
+     for i = 1, test_X:size(1) do
+       f:write(i, ",", pred[i][1],"\n")
+     end
 
      -- Log results.
      f = io.open(opt.logfile, 'a')
