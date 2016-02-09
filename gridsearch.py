@@ -61,7 +61,10 @@ if __name__ == '__main__':
 
         axes = []
         for i in range(len(args['params'])):
-            axes.append([i for i in frange(args['param_starts'][i], args['param_ends'][i], args['param_steps'][i])])
+            if args['params'][i] == 'eta':
+                axes.append([10**i for i in frange(args['param_starts'][i], args['param_ends'][i], args['param_steps'][i])])
+            else:
+                axes.append([i for i in frange(args['param_starts'][i], args['param_ends'][i], args['param_steps'][i])])
         grid = [list(i) for i in itertools.product(*axes)]
         for point in grid:
             print(point)

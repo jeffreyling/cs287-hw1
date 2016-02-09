@@ -330,7 +330,7 @@ function train(X, Y, valid_X, valid_Y)
    local pred, err = eval(valid_X, valid_Y, W, b, nclasses)
    print('Percent correct:', err)
 
-   return pred, err, loss, W, b
+   return pred, err, loss, time, W, b
 end
 
 function main() 
@@ -360,7 +360,7 @@ function main()
        os.exit()
      end
 
-     local pred, err, loss = train(X, Y, valid_X, valid_Y, opt)
+     local pred, err, loss, time = train(X, Y, valid_X, valid_Y, opt)
 
      -- Log results.
      f = io.open(opt.logfile, 'a')
