@@ -169,7 +169,7 @@ With these hyperparameters, we run experiments on the validation sets of SST1 an
  \midrule
  \textsc{MNB} & & 39.9 & 80.6 & 83.8 & 92.2 & 76.4\\
  \textsc{Logistic} & & 39.2 & 78.9 & 71.0 & 87.9 & 68.2 \\
- \textsc{Linear SVM} & &  & &  & \\
+ \textsc{Linear SVM} & & 37.6  & 70.4 & 68.3 & 84.3 & 50.4 \\
  \bottomrule
 \end{tabular}
 \caption{\label{tab:results} Results with optimal hyperparameters.}
@@ -178,6 +178,31 @@ With these hyperparameters, we run experiments on the validation sets of SST1 an
 These results are slightly worse than the baselines reported in Wang and Manning (2012). For naive Bayes, we hypothesize that our shuffling of data in cross-validation may have affected the performance. For regression, this is probably because we did not have time to run gradient descent to its full optimum, and we also may have used different batch sizes in gradient descent.
 
 % Timing
+
+We also kept track of the training time for each algorithm to make sure that everything was running at a feasible speed. The times for the logistic regression and linear SVM are taken as an average per epoch. 
+
+\begin{table}[h]
+  \centering
+  \begin{tabular}{llc}
+    \toprule
+    Model & & Time (s) \\
+    \midrule
+    \textsc{MNB} & & 2 \\
+    \textsc{Logistic} & & 20 \\
+    \textsc{Linear SVM} & & 19 \\
+  \end{tabular}
+  \caption{\label{tab:timing} Training time estimates.}
+\end{table}
+
+As expected, naive Bayes is the fastest by far since it has a closed form solution. The other two algorithms required gradient descent. Although we optimized the gradient calculation with Torch, there is still a noticeable difference. 
+
+We also kept track of loss via console output to make sure that our algorithms were training properly. The diagram below is a plotting of one of our test runs for linear SVM with $\eta = 0.1$ and $\lambda = 0.01$. 
+
+\begin{figure}
+  \centering
+  \includegraphics[width=6cm]{hinge}
+  \caption{\label{fig:loss} Loss curve for linear SVM}
+\end{figure}
 
 % Gradient descent is working curves
 %%\begin{figure}
@@ -194,6 +219,8 @@ These results are slightly worse than the baselines reported in Wang and Manning
 In this homework we implemented basic linear models for text classification. We almost achieved several baselines, though our implementation was slightly worse in performance.
 
 One challenge we ran into was debugging gradient descent. In order to troubleshoot our models, computing numerical gradients turned out to be extremely helpful in discovering where our gradients were being computed incorrectly. We recommend that any gradient-based method come with a test to ensure that gradients are being computed correctly.
+
+Another challenge we ran into was tuning hyperparameters. Although we tried to get training time down as much as we could, logistic regression and linear SVM took too long to do an extensive grid search. Luckily, we were able to find some good values without too many trials. 
 
 \bibliographystyle{apalike}
 \bibliography{writeup}
