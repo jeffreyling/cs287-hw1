@@ -163,13 +163,13 @@ With these hyperparameters, we run experiments on the validation sets of SST1 an
 
 \begin{table}[h]
 \centering
-\begin{tabular}{llcccc}
+\begin{tabular}{llccccc}
  \toprule
- Model &  & SST1 & SST2 & MPQA & Subj \\
+ Model &  & SST1 & SST2 & MPQA & Subj & TREC \\
  \midrule
- \textsc{MNB} & & 39.9 & 80.6 & 83.8 & 92.2 \\
- \textsc{Logistic} & & 39.2 & 78.9 & 71.0 & 87.9 \\
- \textsc{Linear SVM} & &  & &  \\
+ \textsc{MNB} & & 39.9 & 80.6 & 83.8 & 92.2 & 76.4\\
+ \textsc{Logistic} & & 39.2 & 78.9 & 71.0 & 87.9 & 68.2 \\
+ \textsc{Linear SVM} & &  & &  & \\
  \bottomrule
 \end{tabular}
 \caption{\label{tab:results} Results with optimal hyperparameters.}
