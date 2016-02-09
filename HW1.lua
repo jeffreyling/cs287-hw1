@@ -14,7 +14,7 @@ cmd:option('-cross_val', 0, 'do cross validation')
 cmd:option('-alpha', 1, 'alpha for naive Bayes')
 cmd:option('-eta', 0.01, 'learning rate for SGD')
 cmd:option('-batch_size', 50, 'batch size for SGD')
-cmd:option('-max_epochs', 100, 'max # of epochs for SGD')
+cmd:option('-max_epochs', 50, 'max # of epochs for SGD')
 cmd:option('-lambda', 1.0, 'regularization lambda for SGD')
 
 function train_nb(nclasses, nfeatures, X, Y, alpha)
@@ -179,7 +179,7 @@ function reg(W, lambda)
   return torch.pow(W, 2):sum() * lambda / 2
 end
 
-function train_reg(nclasses, nfeatures, X, Y, eta, batch_size, max_epochs, lambda, model)
+function train_reg(nclasses, nfeatures, X, Y, eta, batch_size, max_epochs, lambda, model, valid_X, valid_Y)
   eta = eta or 0
   batch_size = batch_size or 0
   max_epochs = max_epochs or 0
@@ -233,15 +233,14 @@ function train_reg(nclasses, nfeatures, X, Y, eta, batch_size, max_epochs, lambd
       end
 
       -- calculate loss
-      local pred = linear(X, W, b)
+      local pred = linear(valid_X, W, b)
       local loss
       if model == 'logreg' then
-        loss = NLL(pred, Y)
+        loss = NLL(pred, valid_Y)
       elseif model == 'hinge' then
-        loss = hinge(pred, Y)
+        loss = hinge(pred, valid_Y)
       end
       loss = loss + reg(W, lambda)
-      loss = loss / N
       print('Loss at epoch', epoch, ':', loss)
 
       if torch.abs(prev_loss - loss) / prev_loss < 0.001 then
@@ -324,7 +323,7 @@ function train(X, Y, valid_X, valid_Y)
      --local batch_indices = torch.multinomial(torch.ones(X:size(1)), 10000, false):long()
      --X = X:index(1, batch_indices)
      --Y = Y:index(1, batch_indices)
-     W, b, loss = train_reg(nclasses, nfeatures, X, Y, opt.eta, opt.batch_size, opt.max_epochs, opt.lambda, opt.classifier)
+     W, b, loss = train_reg(nclasses, nfeatures, X, Y, opt.eta, opt.batch_size, opt.max_epochs, opt.lambda, opt.classifier, valid_X, valid_Y)
    end
    local time = os.clock() - start
    print('Training time:', time, 'seconds')
@@ -358,7 +357,7 @@ function main()
      print('Data loaded.')
 
      if opt.test_weights ~= '' then
-       local A = torch.load('train.t7')
+       local A = torch.load(opt.test_weights)
        local pred, err = eval(valid_X, valid_Y, A.W, A.b, nclasses)
        print('Percent correct:', err)
        os.exit()
